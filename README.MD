@@ -2,12 +2,12 @@
 
 - Contributors: Elias Turner, Aralco
 - Tags: ecommerce
-- Stable tag: 1.0.0
+- Stable tag: 1.1.0
 - Tested up to: 5.3.2
 - Requires at least: 5.0
 - Requires PHP: 7.2
 - WC requires at least: 3.9
-- WC tested up to: 3.9.1
+- WC tested up to: 3.9.2
 
 ## Description
 
