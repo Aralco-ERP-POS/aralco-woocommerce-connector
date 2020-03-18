@@ -1,16 +1,21 @@
 <?php
 /**
+ * Plugin Name: Aralco WooCommerce Connector
+ * Plugin URI: https://github.com/sonicer105/aralcowoocon
+ * Description: WooCommerce Connector for Aralco POS Systems.
+ * Version: 1.0.0
+ * Author: Elias Turner, Aralco
+ * Author URI: https://aralco.com
+ * Requires at least: 5.0
+ * Tested up to: 5.3.2
+ * Text Domain: aralco_woocommerce_connector
+ * Domain Path: /languages/
+ * WC requires at least: 3.9
+ * WC tested up to: 3.9.2
+ *
  * @package Aralco_WooCommerce_Connector
- * @version 1.0.0
+ * @version 1.1.0
  */
-/*
-Plugin Name: Aralco WooCommerce Connector
-Plugin URI: https://aralco.com
-Description: WooCommerce Connector for Aralco POS Systems.
-Author: Aralco Retail Systems (Elias Turner)
-Version: 1.0.0
-Author URI: http://aralco.com/
-*/
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
 
@@ -23,22 +28,41 @@ require_once "aralco-admin-settings-input-validation.php";
 require_once "aralco-connection-helper.php";
 require_once "aralco-processing-helper.php";
 
+/**
+ * Class Aralco_WooCommerce_Connector
+ *
+ * Main class in the plugin. All the core logic is contained here.
+ */
 class Aralco_WooCommerce_Connector {
-
+    /**
+     * Aralco_WooCommerce_Connector constructor.
+     */
     public function __construct(){
+        // register sync hook and deactivation hook
+        add_action( ARALCO_SLUG . '_sync_products', array($this, 'sync_products_quite'));
+        add_filter('cron_schedules', array($this, 'custom_cron_timespan'));
+        register_deactivation_hook(__FILE__, array($this, 'unschedule_sync'));
+
         // Check if WooCommerce is active
         if (in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get_option('active_plugins')))) {
+            // trigger add product sync to cron (will only do if enabled)
+            $this->schedule_sync();
+
             // register our settings_init to the admin_init action hook
             add_action( 'admin_init', array($this, 'settings_init'));
+
             // register our options_page to the admin_menu action hook
             add_action( 'admin_menu', array($this, 'options_page'));
-            add_action( 'storefront_credit_links_output', array($this, 'do_footer'), 25);
         } else {
             // Show admin notice that WooCommerce needs to be active.
             add_action('admin_notices', array($this, 'plugin_not_available'));
         }
     }
 
+    /**
+     * Callback that displays an error on every admin page informing the user WooCommerce is missing and is a dependency
+     * of this plugin
+     */
     function plugin_not_available() {
         $lang   = '';
         if ( 'en_' !== substr( get_user_locale(), 0, 3 ) ) {
@@ -58,7 +82,7 @@ class Aralco_WooCommerce_Connector {
     }
 
     /**
-     * custom option and settings
+     * Callback that registers the settings and rendering callbacks used to drawing the settings.
      */
     public function settings_init() {
         register_setting(
@@ -69,7 +93,7 @@ class Aralco_WooCommerce_Connector {
 
         add_settings_section(
             ARALCO_SLUG . '_global_section',
-            __('General Settings', ARALCO_SLUG),
+            /*__('General Settings', ARALCO_SLUG)*/'',
             array($this, 'global_section_cb'),
             ARALCO_SLUG
         );
@@ -104,33 +128,67 @@ class Aralco_WooCommerce_Connector {
             ]
         );
 
-//        add_settings_field(
-//            ARALCO_SLUG . '_field_update_interval',
-//            __('Update Interval', ARALCO_SLUG),
-//            array($this, 'field_input'),
-//            ARALCO_SLUG,
-//            ARALCO_SLUG . '_global_section',
-//            [
-//                'type' => 'number',
-//                'label_for' => ARALCO_SLUG . '_field_update_interval',
-//                'class' => ARALCO_SLUG . '_row',
-//                'placeholder' => '5',
-//                'description' => 'Enter the interval in minutes to fetch the products, inventory and customers from Aralco'
-//            ]
-//        );
+        add_settings_field(
+            ARALCO_SLUG . '_field_sync_enabled',
+            __('Sync Enabled', ARALCO_SLUG),
+            array($this, 'field_checkbox'),
+            ARALCO_SLUG,
+            ARALCO_SLUG . '_global_section',
+            [
+                'label_for' => ARALCO_SLUG . '_field_sync_enabled'
+            ]
+        );
+
+        add_settings_field(
+            ARALCO_SLUG . '_field_sync_interval',
+            __('Sync Interval', ARALCO_SLUG),
+            array($this, 'field_input'),
+            ARALCO_SLUG,
+            ARALCO_SLUG . '_global_section',
+            [
+                'type' => 'number',
+                'step' => '1',
+                'min' => '1',
+                'max' => '9999',
+                'label_for' => ARALCO_SLUG . '_field_sync_interval',
+                'class' => ARALCO_SLUG . '_row',
+                'placeholder' => '5'
+            ]
+        );
+
+        add_settings_field(
+            ARALCO_SLUG . '_field_sync_unit',
+            __('Sync Unit', ARALCO_SLUG),
+            array($this, 'field_select'),
+            ARALCO_SLUG,
+            ARALCO_SLUG . '_global_section',
+            [
+                'label_for' => ARALCO_SLUG . '_field_sync_unit',
+                'class' => ARALCO_SLUG . '_row',
+                'description' => 'Enter the interval and unit for how often to sync products and stock automatically. Minimum 5 minutes.',
+                'options' => array(
+                    'Minutes' => '1',
+                    'Hours' => '60',
+                    'Days' => '1440'
+                )
+            ]
+        );
     }
 
     /**
-     * custom option and settings:
-     * callback functions
+     * Callback for rendering the description for the settings section
+     * @param $args
      */
-
     public function global_section_cb($args) {
         ?>
         <p id="<?php echo esc_attr($args['id']); ?>"><?php esc_html_e('General Settings for the Aralco WooCommerce Connector.', ARALCO_SLUG); ?></p>
         <?php
     }
 
+    /**
+     * Callback for Rendering a settings input
+     * @param $args array of options
+     */
     public function field_input($args) {
         $options = get_option(ARALCO_SLUG . '_options');
         require_once 'partials/aralco-admin-settings-input.php';
@@ -138,7 +196,27 @@ class Aralco_WooCommerce_Connector {
     }
 
     /**
-     * top level menu
+     * Callback for Rendering a settings select
+     * @param $args array of options
+     */
+    public function field_select($args) {
+        $options = get_option(ARALCO_SLUG . '_options');
+        require_once 'partials/aralco-admin-settings-input.php';
+        aralco_admin_settings_select($options, $args);
+    }
+
+    /**
+     * Callback for Rendering a settings checkbox
+     * @param $args array of options
+     */
+    public function field_checkbox($args) {
+        $options = get_option(ARALCO_SLUG . '_options');
+        require_once 'partials/aralco-admin-settings-input.php';
+        aralco_admin_settings_checkbox($options, $args);
+    }
+
+    /**
+     * WordPress Menu renderer callback that will add our section to the side bar.
      */
     public function options_page() {
         // add top level menu page
@@ -152,8 +230,8 @@ class Aralco_WooCommerce_Connector {
     }
 
     /**
-     * top level menu:
-     * callback functions
+     * Renders the Aralco WooCommerce Connector Settings page. Will render a warning instead if user does not have the
+     * 'manage_options' permission.
      */
     public function options_page_html() {
         // check user capabilities
@@ -200,6 +278,10 @@ class Aralco_WooCommerce_Connector {
         require_once 'partials/aralco-admin-settings-display.php';
     }
 
+    /**
+     * Method called to test the connection settings from the GUI. Adds settings errors that will be shown on the next
+     * admin page.
+     */
     public function test_connection() {
         $result = Aralco_Connection_Helper::testConnection();
         if ($result === true) {
@@ -227,6 +309,13 @@ class Aralco_WooCommerce_Connector {
         }
     }
 
+    /**
+     * Method called to sync products from the GUI. Adds settings errors that will be shown on the next admin page.
+     *
+     * @param bool $force true if the sync cooldown should be ignored, otherwise false. Default is false
+     * @param bool $everything true if every product from the dawn of time should be synced, or false if you just want
+     * updates since last sync. Default is false
+     */
     public function sync_products($force = false, $everything = false){
         $result = Aralco_Processing_Helper::sync_departments();
         if ($result === true){ // No issue? continue.
@@ -268,14 +357,61 @@ class Aralco_WooCommerce_Connector {
         }
     }
 
-    public function do_footer($content) {
-        $text = __('Powered by Aralco', ARALCO_SLUG);
-        $title = __('Aralco Inventory Management & POS Systems Software', ARALCO_SLUG);
-        return substr($content, 0, -1) .
-               '<span role="separator" aria-hidden="true"></span>' .
-               '<a href="https://aralco.com/" target="_blank" rel="noopener nofollow" title="' . $title . '">' .
-               $text .
-               '</a>.';
+    /**
+     * Method called to sync products by WordPress cron. Unlike sync_products, this method provides no feedback and takes no options.
+     */
+    public function sync_products_quite() {
+        try{
+            $result = Aralco_Processing_Helper::sync_departments();
+            if($result === true){ // No issue? continue.
+                Aralco_Processing_Helper::sync_products(false, false);
+            }
+        } catch (Exception $e) {
+            // Do nothing
+        }
+    }
+
+    /**
+     * Registers our custom interval with cron.
+     * @param $schedules mixed (internal)
+     * @return mixed (internal)
+     */
+    public function custom_cron_timespan($schedules) {
+        $options = get_option(ARALCO_SLUG . '_options');
+        if($options !== false && isset($options[ARALCO_SLUG . '_field_sync_unit']) &&
+           isset($options[ARALCO_SLUG . '_field_sync_interval'])){ // If sync interval and unit are set
+            $minutes = intval($options[ARALCO_SLUG . '_field_sync_unit']) * intval($options[ARALCO_SLUG . '_field_sync_interval']);
+            $schedules[ARALCO_SLUG . '_sync_timespan'] = array(
+                'interval' => $minutes * 60,
+                'display'  => __('Every ' . $minutes . ' Minutes', ARALCO_SLUG)
+            );
+        }
+        return $schedules;
+    }
+
+    /**
+     * Registers the product sync for the scheduled time, but only if _field_sync_enabled is set to "1" and is not already scheduled
+     */
+    public function schedule_sync() {
+        $options = get_option(ARALCO_SLUG . '_options');
+        if($options !== false && isset($options[ARALCO_SLUG . '_field_sync_enabled']) &&
+           $options[ARALCO_SLUG . '_field_sync_enabled'] == '1') { // If sync enabled setting exists and is enabled
+            if (!wp_next_scheduled(ARALCO_SLUG . '_sync_products')){ // If sync is not scheduled
+                wp_schedule_event(time(), ARALCO_SLUG . '_sync_timespan', ARALCO_SLUG . '_sync_products');
+            }
+        } else {
+            $this->unschedule_sync();
+        }
+    }
+
+    /**
+     * Attempts to deregister the product sync.
+     */
+    public function unschedule_sync() {
+        $next_timestamp = wp_next_scheduled(ARALCO_SLUG . '_sync_products');
+        if ($next_timestamp){ // If sync is scheduled
+            wp_unschedule_event($next_timestamp, ARALCO_SLUG . '_sync_products');
+        }
     }
 }
 

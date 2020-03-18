@@ -8,8 +8,8 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
  * Interface for implementing validation for each option input field
  */
 interface Aralco_Input_Validator {
-    public function __construct( $setting );
-    public function is_valid( $input );
+    public function __construct($setting, $args = array());
+    public function is_valid($input);
 }
 
 /**
@@ -25,14 +25,19 @@ class Number_Validator implements Aralco_Input_Validator{
      * @access private
      */
     private $setting;
+    private $min;
+    private $max;
 
     /**
      * Constructor
      *
      * @param string $setting the settings slug title
+     * @param array $args settings for validation
      */
-    public function __construct($setting){
+    public function __construct($setting, $args = array()){
         $this->setting = $setting;
+        $this->min = (isset($args['min'])) ? $args['min'] : 0;
+        $this->max = (isset($args['max'])) ? $args['max'] : PHP_INT_MAX;
     }
 
     /**
@@ -49,14 +54,14 @@ class Number_Validator implements Aralco_Input_Validator{
 
         $input = intval(round(doubleval($input)));
 
-        if ($input <= 0) {
-            $this->add_error('invalid-number', 'You must provide a number greater then 0.');
+        if ($input < $this->min) {
+            $this->add_error('number-out-of-bounds-positive', 'You must provide a number greater then ' . ($this->min - 1) . '.');
             return false;
         }
 
-        if ($input > PHP_INT_MAX ) {
-            $this->add_error('invalid-number', 'You must provide a number less then ' .
-                number_format(PHP_INT_MAX) . '.');
+        if ($input > $this->max) {
+            $this->add_error('number-out-of-bounds-negative', 'You must provide a number less or equal to ' .
+                number_format($this->max) . '.');
             return false;
         }
 
@@ -102,8 +107,9 @@ class String_Validator implements Aralco_Input_Validator{
      * Constructor
      *
      * @param string $setting the settings slug title
+     * @param array $args settings for validation
      */
-    public function __construct($setting){
+    public function __construct($setting, $args = array()){
         $this->setting = $setting;
     }
 
@@ -114,26 +120,11 @@ class String_Validator implements Aralco_Input_Validator{
      * @return bool true if the input is valid; otherwise false
      */
     public function is_valid($input){
-        if (!is_numeric($input)) {
-            $this->add_error('invalid-number', 'You must provide a valid number.');
+        if (!is_string($input)) {
+            $this->add_error('invalid-string', 'You must provide a valid string.');
             return false;
         }
-
-        $input = intval(round(doubleval($input)));
-
-        if ($input <= 0) {
-            $this->add_error('invalid-number', 'You must provide a number greater then 0.');
-            return false;
-        }
-
-        if ($input > PHP_INT_MAX ) {
-            $this->add_error('invalid-number', 'You must provide a number less then ' .
-                                               number_format(PHP_INT_MAX) . '.');
-            return false;
-        }
-
         return true;
-
     }
 
     /**
@@ -166,7 +157,28 @@ function aralco_validate_config($input) {
     $output = array();
     $valid = true;
 
-//    if (!(new Number_Validator(ARALCO_SLUG . '_field_update_interval'))->is_valid($input[ARALCO_SLUG . '_field_update_interval'])) $valid = false;
+    if ((new Number_Validator(
+        ARALCO_SLUG . '_field_sync_interval',
+        array(
+            'min' => 1,
+            'max' => 9999
+        )
+    ))->is_valid($input[ARALCO_SLUG . '_field_sync_interval']) == false) $valid = false;
+
+    $input[ARALCO_SLUG . '_field_sync_enabled'] = (isset($input[ARALCO_SLUG . '_field_sync_enabled'])) ? '1' : '0';
+
+    try{
+        if($valid && $input[ARALCO_SLUG . '_field_sync_interval'] * $input[ARALCO_SLUG . '_field_sync_unit'] < 5){
+            $valid = false;
+            add_settings_error(ARALCO_SLUG . '_field_sync_interval',
+                'time-out-of-bounds',
+                __('You must provide a interval at least 5 minutes long.', ARALCO_SLUG),
+                'error'
+            );
+        }
+    } catch (Exception $e) {
+        // Do nothing
+    }
 
     // Make the inputted data tag safe
     foreach($input as $key => $value){
@@ -186,7 +198,6 @@ function aralco_validate_config($input) {
     } else {
         $output[ARALCO_SLUG . '_field_api_location'] = trim($output[ARALCO_SLUG . '_field_api_location']);
         $output[ARALCO_SLUG . '_field_api_token'] = trim($output[ARALCO_SLUG . '_field_api_token']);
-        $output[ARALCO_SLUG . '_field_update_interval'] = intval(round(doubleval($output[ARALCO_SLUG . '_field_update_interval'])));
     }
 
     return apply_filters('aralco_validate_config', $output, $input);

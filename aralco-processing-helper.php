@@ -42,18 +42,32 @@ class Aralco_Processing_Helper {
             $lastSync = date("Y-m-d\TH:i:s", mktime(0, 0, 0, 1, 1, 1900));
         }
 
-        if(!$force && !$everything){
-            try {
-                if(DateTime::createFromFormat(
-                        'Y-m-d\TH:i:s',
-                        $options[ARALCO_SLUG . '_last_sync'])->modify('+1 hour'
-                    ) > new DateTime()){
-                    //Not Due for sync
-                    return false;
-                }
-            } catch (Exception $e) {
-                // Do nothing. Exception shouldn't ever be triggered but I'm putting in the catch to satisfy my linter
-            };
+//        if(!$force && !$everything){
+//            try {
+//                if(DateTime::createFromFormat(
+//                        'Y-m-d\TH:i:s',
+//                        $options[ARALCO_SLUG . '_last_sync'])->modify('+1 hour'
+//                    ) > new DateTime()){
+//                    //Not Due for sync
+//                    return false;
+//                }
+//            } catch (Exception $e) {
+//                // Do nothing. Exception shouldn't ever be triggered but I'm putting in the catch to satisfy my linter
+//            };
+//        }
+
+        $server_time = Aralco_Connection_Helper::getServerTime();
+        if($server_time instanceof WP_Error){
+            return $server_time;
+        } else if (is_array($server_time) && isset($server_time['UtcOffset'])) {
+            $sign = ($server_time['UtcOffset'] > 0) ? '+' : '-';
+            $server_time['UtcOffset'] -= 60; // Adds an extra hour to the sync to adjust for server de-syncs
+            if ($server_time['UtcOffset'] < 0) {
+                $server_time['UtcOffset'] = $server_time['UtcOffset'] * -1;
+            }
+            $temp = DateTime::createFromFormat('Y-m-d\TH:i:s', $lastSync);
+            $temp->modify($sign . $server_time['UtcOffset'] . ' minutes');
+            $lastSync = $temp->format('Y-m-d\TH:i:s');
         }
 
         $result = Aralco_Connection_Helper::getProducts($lastSync);
@@ -74,7 +88,7 @@ class Aralco_Processing_Helper {
                 if ($result instanceof WP_Error){
                     array_push($errors, $result);
                 }
-                if ($count >= 20) break; //TODO: Remove when done testing
+//                if ($count >= 20) break; //TODO: Remove when done testing
             }
             try{
                 $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
@@ -252,6 +266,106 @@ class Aralco_Processing_Helper {
             }
         }
     }
+
+    /**
+     * https://stackoverflow.com/questions/47518280
+     * Create a product variation for a defined variable product ID.
+     *
+     * @param int $product_id Post ID of the product parent variable product.
+     * @param array $variation_data The data to insert in the product.
+     * @return int|WP_Error
+     */
+//    function create_product_variation($product_id, $variation_data){
+//        // Get the Variable product object (parent)
+//        $product = wc_get_product($product_id);
+//
+//        $variation_post = array(
+//            'post_title'  => $product->get_name(),
+//            'post_name'   => 'product-'.$product_id.'-variation',
+//            'post_status' => 'publish',
+//            'post_parent' => $product_id,
+//            'post_type'   => 'product_variation',
+//            'guid'        => $product->get_permalink()
+//        );
+//
+//        // Creating the product variation
+//        $variation_id = wp_insert_post($variation_post);
+//
+//        if ($variation_id instanceof WP_Error) {
+//            return $variation_id;
+//        }
+//
+//        // Get an instance of the WC_Product_Variation object
+//        $variation = new WC_Product_Variation($variation_id);
+//
+//        // Iterating through the variations attributes
+//        foreach ($variation_data['attributes'] as $attribute => $term_name)
+//        {
+//            $taxonomy = 'pa_'.$attribute; // The attribute taxonomy
+//
+//            // If taxonomy doesn't exists we create it (Thanks to Carl F. Corneil)
+//            if(!taxonomy_exists($taxonomy)){
+//                register_taxonomy(
+//                    $taxonomy,
+//                    'product_variation',
+//                    array(
+//                        'hierarchical' => false,
+//                        'label' => ucfirst( $attribute ),
+//                        'query_var' => true,
+//                        'rewrite' => array( 'slug' => sanitize_title($attribute) ), // The base slug
+//                    ),
+//            );
+//            }
+//
+//            // Check if the Term name exist and if not we create it.
+//            if( ! term_exists( $term_name, $taxonomy ) )
+//                wp_insert_term( $term_name, $taxonomy ); // Create the term
+//
+//            $term_slug = get_term_by('name', $term_name, $taxonomy )->slug; // Get the term slug
+//
+//            // Get the post Terms names from the parent variable product.
+//            $post_term_names =  wp_get_post_terms( $product_id, $taxonomy, array('fields' => 'names') );
+//
+//            // Check if the post term exist and if not we set it in the parent variable product.
+//            if( ! in_array( $term_name, $post_term_names ) )
+//                wp_set_post_terms( $product_id, $term_name, $taxonomy, true );
+//
+//            // Set/save the attribute data in the product variation
+//            update_post_meta( $variation_id, 'attribute_'.$taxonomy, $term_slug );
+//        }
+//
+//        ## Set/save all other data
+//
+//        // SKU
+//        if( ! empty( $variation_data['sku'] ) )
+//            try{
+//                $variation->set_sku($variation_data['sku']);
+//            }catch(WC_Data_Exception $e){
+//                //Ignore
+//            }
+//
+//        // Prices
+//        if( empty( $variation_data['sale_price'] ) ){
+//            $variation->set_price( $variation_data['regular_price'] );
+//        } else {
+//            $variation->set_price( $variation_data['sale_price'] );
+//            $variation->set_sale_price( $variation_data['sale_price'] );
+//        }
+//        $variation->set_regular_price( $variation_data['regular_price'] );
+//
+//        // Stock
+//        if( ! empty($variation_data['stock_qty']) ){
+//            $variation->set_stock_quantity( $variation_data['stock_qty'] );
+//            $variation->set_manage_stock(true);
+//            $variation->set_stock_status('');
+//        } else {
+//            $variation->set_manage_stock(false);
+//        }
+//
+//        $variation->set_weight(''); // weight (reseting)
+//
+//        $variation->save(); // Save the data
+//    }
 
     /**
      * @return true|WP_Error

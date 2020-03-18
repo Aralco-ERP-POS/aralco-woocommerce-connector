@@ -9,8 +9,10 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
  */
 
 ?>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js" integrity="sha256-KM512VNnjElC30ehFwehXjx1YCHPiQkOPmqnrWtpccM=" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.css" integrity="sha256-rByPlHULObEjJ6XQxW/flG2r+22R5dKiAoef+aXWfik=" crossorigin="anonymous" />
 <style>
-    .<?php echo ARALCO_SLUG ?>_row input{
+    .<?php echo ARALCO_SLUG ?>_row input {
         min-width: 300px;
     }
     @media (min-width: 768px) {
@@ -22,18 +24,37 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
             width: 32%;
         }
     }
+    .settings.accordion {
+        margin: 1em 0;
+    }
+    .settings.accordion h2 {
+        font-size: 1.35em;
+    }
 </style>
 <?php settings_errors(ARALCO_SLUG . '_messages'); ?>
 <div class="wrap">
     <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
-    <form action="options.php" method="post">
-        <?php
-        settings_fields(ARALCO_SLUG);
-        do_settings_sections(ARALCO_SLUG);
-        submit_button('Save Settings');
-        ?>
-    </form>
-    <hr>
+    <div class="settings accordion">
+        <h2>General Settings</h2>
+        <form action="options.php" method="post">
+            <?php
+            settings_fields(ARALCO_SLUG);
+            do_settings_sections(ARALCO_SLUG);
+            submit_button('Save Settings');
+            echo '<pre style="border: 1px solid #000; padding: 1em">' .
+                 print_r(get_option(ARALCO_SLUG . '_options'), true) . '</pre>';
+            ?>
+        </form>
+    </div>
+    <script>
+        jQuery('.settings.accordion').accordion({
+            active: <?php echo (count(get_settings_errors(ARALCO_SLUG . '_messages')) > 0 &&
+                                get_settings_errors(ARALCO_SLUG . '_messages')[0]['type'] == 'error') ?
+                '0' : 'false' ?>,
+            animate: 200,
+            collapsible: true
+        })
+    </script>
     <div class="aralco-columns">
     <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post">
         <h2>Test the Connection</h2>
@@ -49,7 +70,7 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
             $last_sync = get_option(ARALCO_SLUG . '_last_sync');
             $total_records = 0;
             $total_run_tiume = 0;
-            echo $last_sync !== false ? $last_sync : '(never run)'
+            echo $last_sync !== false ? $last_sync . ' UTC' : '(never run)'
         ?></li><li>&bull; <?php
             $time_taken = get_option(ARALCO_SLUG . '_last_sync_duration_departments');
             $count = get_option(ARALCO_SLUG . '_last_sync_department_count');
@@ -78,7 +99,4 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
         <?php submit_button('Force Sync Now'); ?>
     </form>
     </div>
-    <pre><?php
-        print_r(wc_get_product(18745))
-    ?></pre>
 </div>
