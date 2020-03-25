@@ -41,8 +41,8 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
             settings_fields(ARALCO_SLUG);
             do_settings_sections(ARALCO_SLUG);
             submit_button('Save Settings');
-            echo '<pre style="border: 1px solid #000; padding: 1em">' .
-                 print_r(get_option(ARALCO_SLUG . '_options'), true) . '</pre>';
+//            echo '<pre style="border: 1px solid #000; padding: 1em">' .
+//                 print_r(get_option(ARALCO_SLUG . '_options'), true) . '</pre>';
             ?>
         </form>
     </div>
@@ -79,6 +79,13 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
             echo ($count !== false ? $count : '0') . ' Departments in ' .
                  ($time_taken !== false ? $time_taken : '0') . ' seconds.'
         ?></li><li>&bull; <?php
+            $time_taken = get_option(ARALCO_SLUG . '_last_sync_duration_grids');
+            $count = get_option(ARALCO_SLUG . '_last_sync_grid_count');
+            if ($time_taken > 0) $total_run_tiume += $time_taken;
+            if ($count > 0) $total_records += $count;
+            echo ($count !== false ? $count : '0') . ' Grids in ' .
+                 ($time_taken !== false ? $time_taken : '0') . ' seconds.'
+        ?></li><li>&bull; <?php
             $time_taken = get_option(ARALCO_SLUG . '_last_sync_duration_products');
             $count = get_option(ARALCO_SLUG . '_last_sync_product_count');
             if ($time_taken > 0) $total_run_tiume += $time_taken;
@@ -99,4 +106,5 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
         <?php submit_button('Force Sync Now'); ?>
     </form>
     </div>
+    <pre><?php /*print_r();*/ ?></pre>
 </div>

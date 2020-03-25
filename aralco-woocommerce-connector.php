@@ -267,11 +267,11 @@ class Aralco_WooCommerce_Connector {
         }
 
         if (isset($_POST['sync-now'])){
-            $this->sync_products(true);
+            $this->sync_products();
         }
 
         if (isset($_POST['force-sync-now'])){
-            $this->sync_products(true, true);
+            $this->sync_products(true);
         }
 
         // show error/update messages
@@ -312,14 +312,16 @@ class Aralco_WooCommerce_Connector {
     /**
      * Method called to sync products from the GUI. Adds settings errors that will be shown on the next admin page.
      *
-     * @param bool $force true if the sync cooldown should be ignored, otherwise false. Default is false
      * @param bool $everything true if every product from the dawn of time should be synced, or false if you just want
      * updates since last sync. Default is false
      */
-    public function sync_products($force = false, $everything = false){
+    public function sync_products($everything = false){
         $result = Aralco_Processing_Helper::sync_departments();
-        if ($result === true){ // No issue? continue.
-            $result = Aralco_Processing_Helper::sync_products($force, $everything);
+        if($result === true){ // No issue? continue.
+            $result = Aralco_Processing_Helper::sync_grids();
+            if($result === true){ // No issue? continue.
+                $result = Aralco_Processing_Helper::sync_products($everything);
+            }
         }
         if (is_bool($result)) {
             add_settings_error(
@@ -364,7 +366,10 @@ class Aralco_WooCommerce_Connector {
         try{
             $result = Aralco_Processing_Helper::sync_departments();
             if($result === true){ // No issue? continue.
-                Aralco_Processing_Helper::sync_products(false, false);
+                $result = Aralco_Processing_Helper::sync_grids();
+                if($result === true){ // No issue? continue.
+                    Aralco_Processing_Helper::sync_products(false);
+                }
             }
         } catch (Exception $e) {
             // Do nothing

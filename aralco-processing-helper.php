@@ -14,17 +14,14 @@ class Aralco_Processing_Helper {
      *
      * Will only check for new changes that occurred since the last time the product sync was run.
      *
-     * Will skip checking for updates if the timeout between checks has not elapsed.
-     *
      * Config must be set before this method will function
      *
-     * @param bool $force passing true will override the timeout and pull the latest changes.
      * @param bool $everything passing true will pull every product instead of just changed products. THIS WILL TAKE
      * TIME
      * @return bool|int|WP_Error|WP_Error[] Returns a int count of the records modified if the update completed successfully,
      * false if no update was due, and a WP_Error instance if something went wrong.
      */
-    static function sync_products($force = false, $everything = false) {
+    static function sync_products($everything = false) {
         if ($everything) set_time_limit(3600); // Required for the amount of data that needs to be fetched
         try{
             $start_time = new DateTime();
@@ -41,20 +38,6 @@ class Aralco_Processing_Helper {
         if(!isset($lastSync) || $lastSync === false || $everything){
             $lastSync = date("Y-m-d\TH:i:s", mktime(0, 0, 0, 1, 1, 1900));
         }
-
-//        if(!$force && !$everything){
-//            try {
-//                if(DateTime::createFromFormat(
-//                        'Y-m-d\TH:i:s',
-//                        $options[ARALCO_SLUG . '_last_sync'])->modify('+1 hour'
-//                    ) > new DateTime()){
-//                    //Not Due for sync
-//                    return false;
-//                }
-//            } catch (Exception $e) {
-//                // Do nothing. Exception shouldn't ever be triggered but I'm putting in the catch to satisfy my linter
-//            };
-//        }
 
         $server_time = Aralco_Connection_Helper::getServerTime();
         if($server_time instanceof WP_Error){
@@ -148,6 +131,10 @@ class Aralco_Processing_Helper {
             }
         }
 
+        if($item['Product']['HasDimension']){
+            wp_set_object_terms($post_id, 'variable', 'product_type', true);
+        }
+
         $product = wc_get_product($post_id);
 
         if($is_new){
@@ -159,10 +146,11 @@ class Aralco_Processing_Helper {
             $product->set_total_sales(0);
             $product->set_downloadable(false);
             $product->set_virtual(false);
-            $product->set_manage_stock(true);
+//            $product->set_manage_stock(false);
             $product->set_backorders('yes');
         }
 
+        $product->set_manage_stock(false); // TODO: Remove later?
         $product->set_name($item['Product']['Name']);
         $product->set_description($item['Product']['Description']);
         $product->set_short_description($item['Product']['SeoDescription']);
@@ -202,8 +190,8 @@ class Aralco_Processing_Helper {
 
         $product->save();
 
-
         Aralco_Processing_Helper::process_item_images($post_id, $item);
+//        Aralco_Processing_Helper::process_product_variations($product, $item); //TODO: Fix this
         return true;
     }
 
@@ -268,104 +256,260 @@ class Aralco_Processing_Helper {
     }
 
     /**
-     * https://stackoverflow.com/questions/47518280
-     * Create a product variation for a defined variable product ID.
+     * Based on https://stackoverflow.com/questions/47518280 but heavily modified.
+     * Create a product variation for a defined variable product.
      *
-     * @param int $product_id Post ID of the product parent variable product.
-     * @param array $variation_data The data to insert in the product.
-     * @return int|WP_Error
+     * @param WC_Product $product The base product
+     * @param array $aralco_product The data from aralco about the product
+     * @return bool|WP_Error
      */
-//    function create_product_variation($product_id, $variation_data){
-//        // Get the Variable product object (parent)
-//        $product = wc_get_product($product_id);
+    static function process_product_variations($product, $aralco_product){
+        // Fetch the grids for this item and assign grids to product
+        $grids = array();
+        for ($i = 1; $i <= 4; $i++){
+            if(isset($aralco_product['Product']['DimensionId' . $i])){
+                $terms = array();
+                $grids['grid' . $i] = get_terms(array(
+                    'hide_empty' => false,
+                    'taxonomy'   => wc_attribute_taxonomy_name('grid-' . $aralco_product['Product']['DimensionId' . $i])
+                ));
+                /**
+                 * @var $grid WP_Term
+                 */
+                foreach($grids['grid' . $i] as $grid){
+                    array_push($terms, $grid->name);
+                }
+                wp_set_object_terms($product->get_id(), $terms, wc_attribute_taxonomy_name(
+                    'grid-' . $aralco_product['Product']['DimensionId' . $i]));
+            } else break;
+        }
+        if (count($grids) == 0) return true; // Nothing to do.
+
+
+
+
+        // Generate a list of possible combinations
+        $combos = Aralco_Processing_Helper::generate_grid_sets($grids);
+
+        // DEBUG
+//        print_r(array(
+//            'product' => array(
+//                'id' => $aralco_product['ProductID'],
+//                'code' => $aralco_product['Product']['Code'],
+//                'name' => $aralco_product['Product']['Name']
+//            ),
+//            'grids' => $grids,
+//            'combos' => $combos
+//        ));
+
+        foreach ($combos as $combo){
+            $variation_post = array(
+                'post_title'  => $product->get_title(),
+                'post_name'   => 'product-'.$product->get_id().'-variation',
+                'post_status' => 'publish',
+                'post_parent' => $product->get_id(),
+                'post_type'   => 'product_variation',
+                'guid'        => $product->get_permalink()
+            );
+
+            // Creating the product variation
+            $variation_id = wp_insert_post($variation_post);
+
+            if ($variation_id instanceof WP_Error) {
+                print_r($variation_id);
+                return false;
+            }
+
+            // Get an instance of the WC_Product_Variation object
+            $variation = new WC_Product_Variation($variation_id);
+
+            // Iterating through the variations attributes
+            /**
+             * Type hint for IDE
+             * @var $term WP_Term
+             */
+            foreach ($combo as $key => $term) {
+
+                $taxonomy = wc_attribute_taxonomy_name('grid-' . $aralco_product['Product']['DimensionId' . ($key + 1)]);
+
+//                // Get the post Terms names from the parent variable product.
+//                $post_term_names = wp_get_post_terms( $product->get_id(), $taxonomy, array('fields' => 'names') );
 //
-//        $variation_post = array(
-//            'post_title'  => $product->get_name(),
-//            'post_name'   => 'product-'.$product_id.'-variation',
-//            'post_status' => 'publish',
-//            'post_parent' => $product_id,
-//            'post_type'   => 'product_variation',
-//            'guid'        => $product->get_permalink()
-//        );
-//
-//        // Creating the product variation
-//        $variation_id = wp_insert_post($variation_post);
-//
-//        if ($variation_id instanceof WP_Error) {
-//            return $variation_id;
-//        }
-//
-//        // Get an instance of the WC_Product_Variation object
-//        $variation = new WC_Product_Variation($variation_id);
-//
-//        // Iterating through the variations attributes
-//        foreach ($variation_data['attributes'] as $attribute => $term_name)
-//        {
-//            $taxonomy = 'pa_'.$attribute; // The attribute taxonomy
-//
-//            // If taxonomy doesn't exists we create it (Thanks to Carl F. Corneil)
-//            if(!taxonomy_exists($taxonomy)){
-//                register_taxonomy(
-//                    $taxonomy,
-//                    'product_variation',
-//                    array(
-//                        'hierarchical' => false,
-//                        'label' => ucfirst( $attribute ),
-//                        'query_var' => true,
-//                        'rewrite' => array( 'slug' => sanitize_title($attribute) ), // The base slug
-//                    ),
-//            );
-//            }
-//
-//            // Check if the Term name exist and if not we create it.
-//            if( ! term_exists( $term_name, $taxonomy ) )
-//                wp_insert_term( $term_name, $taxonomy ); // Create the term
-//
-//            $term_slug = get_term_by('name', $term_name, $taxonomy )->slug; // Get the term slug
-//
-//            // Get the post Terms names from the parent variable product.
-//            $post_term_names =  wp_get_post_terms( $product_id, $taxonomy, array('fields' => 'names') );
-//
-//            // Check if the post term exist and if not we set it in the parent variable product.
-//            if( ! in_array( $term_name, $post_term_names ) )
-//                wp_set_post_terms( $product_id, $term_name, $taxonomy, true );
-//
-//            // Set/save the attribute data in the product variation
-//            update_post_meta( $variation_id, 'attribute_'.$taxonomy, $term_slug );
-//        }
-//
-//        ## Set/save all other data
-//
-//        // SKU
-//        if( ! empty( $variation_data['sku'] ) )
+//                // Check if the post term exist and if not we set it in the parent variable product.
+//                if( ! in_array( $term->name, $post_term_names ) )
+//                    wp_set_post_terms( $product->get_id(), $term->name, $taxonomy, true );
+
+                // Set/save the attribute data in the product variation
+                update_post_meta( $variation_id, 'attribute_'.$taxonomy, $term );
+            }
+
+            ## Set/save all other data
+
+            // SKU
 //            try{
-//                $variation->set_sku($variation_data['sku']);
-//            }catch(WC_Data_Exception $e){
-//                //Ignore
+//                $variation->set_sku($aralco_product['Product']['Code']);
+//            }catch(Exception $e){}
+
+            // Prices
+            $variation->set_price(isset($aralco_product['Product']['DiscountPrice'])?
+                $aralco_product['Product']['DiscountPrice'] : $aralco_product['Product']['Price']);
+            $variation->set_sale_price(isset($aralco_product['Product']['DiscountPrice']) ?
+                $aralco_product['Product']['DiscountPrice'] : $aralco_product['Product']['Price']);
+            $variation->set_regular_price($aralco_product['Product']['Price']);
+
+            // Stock
+//            if( ! empty($variation_data['stock_qty']) ){
+//                $variation->set_stock_quantity( $variation_data['stock_qty'] );
+//                $variation->set_manage_stock(true);
+//                $variation->set_stock_status('');
+//            } else {
+                $variation->set_manage_stock(false);
 //            }
-//
-//        // Prices
-//        if( empty( $variation_data['sale_price'] ) ){
-//            $variation->set_price( $variation_data['regular_price'] );
-//        } else {
-//            $variation->set_price( $variation_data['sale_price'] );
-//            $variation->set_sale_price( $variation_data['sale_price'] );
-//        }
-//        $variation->set_regular_price( $variation_data['regular_price'] );
-//
-//        // Stock
-//        if( ! empty($variation_data['stock_qty']) ){
-//            $variation->set_stock_quantity( $variation_data['stock_qty'] );
-//            $variation->set_manage_stock(true);
-//            $variation->set_stock_status('');
-//        } else {
-//            $variation->set_manage_stock(false);
-//        }
-//
-//        $variation->set_weight(''); // weight (reseting)
-//
-//        $variation->save(); // Save the data
-//    }
+
+//            $variation->set_weight(''); // weight (reseting)
+
+            $variation->save(); // Save the data
+        }
+        return true;
+    }
+
+    /**
+     * Given the grids of a product, a list of combinations is generated.
+     *
+     * @param array $grids the grids to generate combinations from
+     * @return array a unorded array of every possible grid combination
+     */
+    static function generate_grid_sets($grids){
+        $combos = array();
+        if (isset($grids['grid1'])) {
+            foreach($grids['grid1'] as $term1){
+                if (isset($grids['grid2'])){
+                    foreach($grids['grid2'] as $term2){
+                        if (isset($grids['grid3'])){
+                            foreach($grids['grid3'] as $term3){
+                                if (isset($grids['grid4'])){
+                                    foreach($grids['grid4'] as $term4){
+                                        array_push($combos, array($term1, $term2, $term3, $term4));
+                                    }
+                                } else {
+                                    array_push($combos, array($term1, $term2, $term3));
+                                }
+                            }
+                        } else {
+                            array_push($combos, array($term1, $term2));
+                        }
+                    }
+                } else {
+                    array_push($combos, array($term1));
+                }
+            }
+        }
+        return $combos;
+    }
+
+    /**
+     * Downloads and registers all the grids
+     *
+     * @return true|WP_Error True if everything works, or WP_Error instance if something goes wrong
+     */
+    static function sync_grids(){
+        try{
+            $start_time = new DateTime();
+        } catch(Exception $e) {}
+
+        // Get the grids.
+        $raw_grids = Aralco_Connection_Helper::getGrids();
+        if($raw_grids instanceof WP_Error || (isset($raw_grids[0]) && !isset($raw_grids[0]['CategoryId']))) {
+            return $raw_grids; // Something isn't right. Probably API error
+        }
+        if(!isset($raw_grids[0])){
+            return true; // Nothing to do;
+        }
+
+        // Clean up the grids so we can loop cleaner
+        $grids = array();
+        foreach($raw_grids as $key => $grid){
+            // We are going to nest all the grid values instead of having a flat list of name/value pairs
+            if(!isset($grids[$grid['CategoryId']])){
+                $grids[$grid['CategoryId']] = array();
+                $grids[$grid['CategoryId']]['DepartmentId'] = $grid['DepartmentId'];
+                $grids[$grid['CategoryId']]['Type'] = $grid['Type'];
+                $grids[$grid['CategoryId']]['CategoryId'] = $grid['CategoryId'];
+                $grids[$grid['CategoryId']]['CategoryName'] = $grid['CategoryName'];
+                $grids[$grid['CategoryId']]['values'] = array();
+            }
+            $grids[$grid['CategoryId']]['values'][$grid['ValueId']] = array(
+                'ValueId' => $grid['ValueId'],
+                'ValueName' => $grid['ValueName']
+            );
+        }
+        unset($raw_grids);
+
+        // Start data entry
+        global $wpdb;
+        $i1 = 0;
+        foreach($grids as $key => $grid){
+            // Part 1: The top level grid groupings
+            $does_exist = taxonomy_exists(wc_attribute_taxonomy_name('grid-' . $grid['CategoryId']));
+            if($does_exist) {
+                $id = wc_attribute_taxonomy_id_by_name('grid-' . $grid['CategoryId']);
+                wc_update_attribute($id, array(
+                    'id' => $id,
+                    'name' => $grid['CategoryName'],
+                    'slug' => 'grid-' . $grid['CategoryId'],
+                    'type' => 'select',
+                    'order_by' => 'menu_order',
+                    'has_archives' => false
+                ));
+            } else {
+                wc_create_attribute(array(
+                    'name' => $grid['CategoryName'],
+                    'slug' => 'grid-' . $grid['CategoryId'],
+                    'type' => 'select',
+                    'order_by' => 'menu_order',
+                    'has_archives' => false
+                ));
+            }
+            // Part 2: Dealing with the values
+            $i2 = 0;
+            foreach($grid['values'] as $k => $value) {
+                $taxonomy = wc_attribute_taxonomy_name('grid-' . $grid['CategoryId']);
+                $slug = sprintf('%s-val-%s', $taxonomy, '' . $value['ValueId']);
+                $existing = get_term_by('slug', $slug, $taxonomy);
+                if ($existing == false){
+                    $result = wp_insert_term($value['ValueName'], $taxonomy, array(
+                        'slug' => $slug
+                    ));
+                    if($result instanceof WP_Error){
+//                        return $result;
+                        // Ignore and continue for now. //TODO
+                        continue;
+                    }
+                    $id = $result['term_id'];
+                } else {
+                    $id = $existing->term_id;
+                    wp_update_term($id, $taxonomy, array(
+                        'name' => $value['ValueName'],
+                    ));
+                }
+                delete_term_meta($id, 'order');
+                add_term_meta($id, 'order', $i2++);
+                $temp_key = 'order_' . wc_attribute_taxonomy_name('grid-' . $grid['CategoryId']);
+                delete_term_meta($id, $temp_key);
+                add_term_meta($id, $temp_key, $i1);
+                delete_term_meta($id, 'aralco_grid_id');
+                add_term_meta($id, 'aralco_grid_id', $grid['CategoryId']);
+            }
+            $i1++;
+        }
+
+        try{
+            $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
+            update_option(ARALCO_SLUG . '_last_sync_duration_grids', $time_taken);
+        } catch(Exception $e) {}
+        update_option(ARALCO_SLUG . '_last_sync_grid_count', $i1);
+        return true;
+    }
 
     /**
      * @return true|WP_Error
