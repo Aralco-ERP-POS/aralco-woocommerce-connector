@@ -30,19 +30,23 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
     .settings.accordion h2 {
         font-size: 1.35em;
     }
+    ::placeholder {
+        color: #ccc;
+    }
 </style>
 <?php settings_errors(ARALCO_SLUG . '_messages'); ?>
+<h1><?php echo esc_html(get_admin_page_title()); ?></h1>
 <div class="wrap">
-    <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
+    <h1>Settings</h1>
     <div class="settings accordion">
-        <h2>General Settings</h2>
+        <h2>Hide/Show</h2>
         <form action="options.php" method="post">
             <?php
             settings_fields(ARALCO_SLUG);
             do_settings_sections(ARALCO_SLUG);
             submit_button('Save Settings');
-//            echo '<pre style="border: 1px solid #000; padding: 1em">' .
-//                 print_r(get_option(ARALCO_SLUG . '_options'), true) . '</pre>';
+            echo '<pre style="border: 1px solid #000; padding: 1em">' .
+                 print_r(get_option(ARALCO_SLUG . '_options'), true) . '</pre>';
             ?>
         </form>
     </div>
@@ -55,6 +59,7 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
             collapsible: true
         })
     </script>
+    <h1>Tools</h1>
     <div class="aralco-columns">
     <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post">
         <h2>Test the Connection</h2>
@@ -106,5 +111,6 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
         <?php submit_button('Force Sync Now'); ?>
     </form>
     </div>
-    <pre><?php /*print_r();*/ ?></pre>
+    <hr>
+    <div style="text-align: center;">Questions? Comments? Find a problem? <a href="https://aralco.com/services/support/" target="_blank" rel="noopener,noreferrer">Contact Aralco.</a></div>
 </div>

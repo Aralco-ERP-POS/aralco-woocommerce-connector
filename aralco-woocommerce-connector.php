@@ -53,6 +53,15 @@ class Aralco_WooCommerce_Connector {
 
             // register our options_page to the admin_menu action hook
             add_action( 'admin_menu', array($this, 'options_page'));
+
+            // register order complete hook
+            add_action( 'woocommerce_payment_complete', array($this, 'submit_order_to_aralco'), 10, 1 );
+
+            // register new user hook
+            add_action('user_register', array($this, 'new_customer'));
+
+            // register login hook
+            add_action('wp_login', array($this, 'customer_login'));
         } else {
             // Show admin notice that WooCommerce needs to be active.
             add_action('admin_notices', array($this, 'plugin_not_available'));
@@ -93,7 +102,7 @@ class Aralco_WooCommerce_Connector {
 
         add_settings_section(
             ARALCO_SLUG . '_global_section',
-            /*__('General Settings', ARALCO_SLUG)*/'',
+            '',
             array($this, 'global_section_cb'),
             ARALCO_SLUG
         );
@@ -109,6 +118,7 @@ class Aralco_WooCommerce_Connector {
                 'label_for' => ARALCO_SLUG . '_field_api_location',
                 'class' => ARALCO_SLUG . '_row',
                 'placeholder' => 'http://localhost:1234/',
+                'required' => 'required',
                 'description' => 'Enter the web address of your Aralco Ecommerce API. Please include the http:// and trailing slash'
             ]
         );
@@ -124,6 +134,7 @@ class Aralco_WooCommerce_Connector {
                 'label_for' => ARALCO_SLUG . '_field_api_token',
                 'class' => ARALCO_SLUG . '_row',
                 'placeholder' => '1a2b3v4d5e6f7g8h9i0j1k2l3m4n5o6p7q8r9s0t',
+                'required' => 'required',
                 'description' => 'Enter the secret barer token for your Aralco Ecommerce API'
             ]
         );
@@ -135,7 +146,8 @@ class Aralco_WooCommerce_Connector {
             ARALCO_SLUG,
             ARALCO_SLUG . '_global_section',
             [
-                'label_for' => ARALCO_SLUG . '_field_sync_enabled'
+                'label_for' => ARALCO_SLUG . '_field_sync_enabled',
+                'required' => 'required'
             ]
         );
 
@@ -152,7 +164,8 @@ class Aralco_WooCommerce_Connector {
                 'max' => '9999',
                 'label_for' => ARALCO_SLUG . '_field_sync_interval',
                 'class' => ARALCO_SLUG . '_row',
-                'placeholder' => '5'
+                'placeholder' => '5',
+                'required' => 'required'
             ]
         );
 
@@ -170,7 +183,73 @@ class Aralco_WooCommerce_Connector {
                     'Minutes' => '1',
                     'Hours' => '60',
                     'Days' => '1440'
-                )
+                ),
+                'required' => 'required'
+            ]
+        );
+
+        add_settings_section(
+            ARALCO_SLUG . '_order_section',
+            '',
+            array($this, 'order_section_cb'),
+            ARALCO_SLUG
+        );
+
+        add_settings_field(
+            ARALCO_SLUG . '_field_order_enabled',
+            __('Forward Orders to Aralco on Receipt of Payment', ARALCO_SLUG),
+            array($this, 'field_checkbox'),
+            ARALCO_SLUG,
+            ARALCO_SLUG . '_order_section',
+            [
+                'label_for' => ARALCO_SLUG . '_field_order_enabled'
+            ]
+        );
+
+        add_settings_field(
+            ARALCO_SLUG . '_field_order_enabled',
+            __('Forward Orders', ARALCO_SLUG),
+            array($this, 'field_checkbox'),
+            ARALCO_SLUG,
+            ARALCO_SLUG . '_order_section',
+            [
+                'label_for' => ARALCO_SLUG . '_field_order_enabled',
+                'required' => 'required',
+                'description' => 'When checked, will forward any new orders to Aralco on Receipt of Payment'
+            ]
+        );
+
+        add_settings_field(
+            ARALCO_SLUG . '_field_default_order_email',
+            __('Default Order Email', ARALCO_SLUG),
+            array($this, 'field_input'),
+            ARALCO_SLUG,
+            ARALCO_SLUG . '_order_section',
+            [
+                'type' => 'text',
+                'label_for' => ARALCO_SLUG . '_field_default_order_email',
+                'class' => ARALCO_SLUG . '_row',
+                'placeholder' => 'john@example.com',
+                'description' => 'Required for guest checkout. Please provide an email that is attached to a valid customer profile in Aralco. Not providing one will result in an error if a guest checks out.'
+            ]
+        );
+
+        add_settings_field(
+            ARALCO_SLUG . '_field_store_id',
+            __('Aralco Store ID', ARALCO_SLUG),
+            array($this, 'field_input'),
+            ARALCO_SLUG,
+            ARALCO_SLUG . '_order_section',
+            [
+                'type' => 'number',
+                'step' => '1',
+                'min' => '0',
+                'max' => '999999',
+                'label_for' => ARALCO_SLUG . '_field_store_id',
+                'class' => ARALCO_SLUG . '_row',
+                'placeholder' => '1',
+                'required' => 'required',
+                'description' => 'The ID of the store to submit new orders to.'
             ]
         );
     }
@@ -181,7 +260,20 @@ class Aralco_WooCommerce_Connector {
      */
     public function global_section_cb($args) {
         ?>
+        <h2><?php esc_html_e('General', ARALCO_SLUG) ?></h2>
         <p id="<?php echo esc_attr($args['id']); ?>"><?php esc_html_e('General Settings for the Aralco WooCommerce Connector.', ARALCO_SLUG); ?></p>
+        <?php
+    }
+
+    /**
+     * Callback for rendering the description for the settings section
+     * @param $args
+     */
+    public function order_section_cb($args) {
+        ?>
+        <hr>
+        <h2><?php esc_html_e('Orders', ARALCO_SLUG) ?></h2>
+        <p id="<?php echo esc_attr($args['id']); ?>"><?php esc_html_e('Order Settings for the Aralco WooCommerce Connector.', ARALCO_SLUG); ?></p>
         <?php
     }
 
@@ -221,7 +313,7 @@ class Aralco_WooCommerce_Connector {
     public function options_page() {
         // add top level menu page
         add_menu_page(
-            'Aralco WooCommerce Connector Settings',
+            'Aralco WooCommerce Connector',
             'Aralco Options',
             'manage_options',
             ARALCO_SLUG . '_settings',
@@ -417,6 +509,55 @@ class Aralco_WooCommerce_Connector {
         if ($next_timestamp){ // If sync is scheduled
             wp_unschedule_event($next_timestamp, ARALCO_SLUG . '_sync_products');
         }
+    }
+
+    /**
+     * Registers new user as customer in Aralco
+     *
+     * @param int $user_id the id of the new wordpress user
+     */
+    public function new_customer($user_id) {
+        $id = Aralco_Processing_Helper::process_new_customer($user_id);
+        if(!$id || $id instanceof WP_Error) return;
+        update_user_meta($user_id, 'aralco_data', $id);
+    }
+
+    /**
+     * Get aralco info for user that just logged in and cache it
+     *
+     * @param string $user_login the username
+     * @param WP_User $user the user object
+     */
+    public function customer_login($user_login, $user) {
+        $aralcoId = get_user_meta($user->ID, 'aralco_id', true);
+        if (!empty($aralcoId)) {
+            // aralco id was found, pull the data.
+            $data = Aralco_Connection_Helper::getCustomer('Id', $aralcoId);
+        } else {
+            // aralco id wasn't found. Let's try pulling by email instead.
+            $data = Aralco_Connection_Helper::getCustomer('UserName', $user->user_email);
+        }
+
+        if (!$data || $data instanceof WP_Error) {
+            // No aralco user was found. No meta will be pulled.
+            return;
+        }
+
+        if (empty($aralcoId)){
+            // Save the ID so we don't have to look it up by email again.
+            update_user_meta($user->ID, 'aralco_id', $data['id']);
+        }
+
+        update_user_meta($user->ID, 'aralco_data', $data);
+    }
+
+    /**
+     * Catches completed orders and pushes them back to Aralco
+     *
+     * @param $order_id
+     */
+    public function submit_order_to_aralco($order_id) {
+        Aralco_Processing_Helper::process_order($order_id);
     }
 }
 

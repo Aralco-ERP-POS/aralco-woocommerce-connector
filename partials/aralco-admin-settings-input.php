@@ -22,7 +22,8 @@ function aralco_admin_settings_input($options, $args){
            value="<?php echo (isset($options[$args['label_for']])) ? esc_attr($options[$args['label_for']]) : ''; ?>"
            <?php echo (isset($args['step'])) ? 'step="' . $args['step'] . '"' : '' ?>
            <?php echo (isset($args['min'])) ? 'min="' . $args['min'] . '"' : '' ?>
-           <?php echo (isset($args['max'])) ? 'max="' . $args['max'] . '"' : '' ?>  />
+           <?php echo (isset($args['max'])) ? 'max="' . $args['max'] . '"' : '' ?>
+           <?php echo (isset($args['required'])) ? 'required="' . $args['required'] . '"' : '' ?>  />
     <?php if(isset($args['description'])){?>
         <p class="description">
             <?php esc_html_e($args['description'], ARALCO_SLUG); ?>
@@ -47,6 +48,7 @@ function aralco_admin_settings_select($options, $args){
     } ?>
     <select id="<?php echo esc_attr($args['label_for']); ?>"
            name="<?php echo ARALCO_SLUG ?>_options[<?php echo esc_attr($args['label_for']); ?>]"
+        <?php echo (isset($args['required'])) ? 'required="' . $args['required'] . '"' : '' ?>
     ><?php
         foreach($args['options'] as $label => $value){
             $selected = (isset($options[$args['label_for']]) && $options[$args['label_for']] == $value) ?

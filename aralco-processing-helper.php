@@ -628,4 +628,84 @@ class Aralco_Processing_Helper {
         // asign to feature image
         update_term_meta($term_id,'thumbnail_id', $attach_id);
     }
+
+    /**
+     * Registers new user as customer in Aralco
+     *
+     * @param int $user_id the wordpress user's id
+     * @return int|WP_Error the corresponding id in Aralco for the wordpress user
+     */
+    static function process_new_customer($user_id){
+        $user = get_user_by('ID', $user_id);
+        // First, check if this user actually exists.
+        $data = Aralco_Connection_Helper::getCustomer('UserName', $user->user_email);
+        if ($data && !$data instanceof WP_Error) {
+            // The user already exist so just return the ID
+            return $data['id'];
+        }
+        // User doesn't exist so let's create it.
+        $customer = array(
+            'Username'        => $user->user_email,
+            'Password'        => 'AralcoWeb', // Required but not used
+            'Name'            => (empty($user->first_name)) ? 'Unknown' : $user->first_name,
+            'Surname'         => (empty($user->last_name)) ? 'Unknown' : $user->last_name,
+            'Companyname'     => 'Web Registration',
+            'Address1'        => 'Unknown',
+//            'City'            => '',
+            'Country'         => 'Unknown',
+            'ProvinceState'   => 'Unknown',
+//            'Phone'           => ''
+        );
+        return Aralco_Connection_Helper::createCustomer($customer);
+    }
+
+    /**
+     * Processes and submits the order to Aralco
+     *
+     * @param int $order_id the id of the order to submit to Aralco
+     * @return bool|WP_Error true if the order was submitted with no issue, false if orders are turned off, and WP_Error
+     * instance if something went wrong
+     */
+    static function process_order($order_id) {
+//        $options = get_option(ARALCO_SLUG . '_options');
+//
+//        if(!isset($options[ARALCO_SLUG . '_field_order_enabled']) || $options[ARALCO_SLUG . '_field_order_enabled'] != true) {
+//            // Do nothing id you don't have orders enabled in settings
+//            return false;
+//        }
+//
+//        $order = wc_get_order($order_id);
+//        if(!$order) {
+//            // Return and error if the order dose not exist
+//            return new WP_Error(
+//                ARALCO_SLUG . '_message',
+//                __('No order was found for the requested order ID', ARALCO_SLUG)
+//            );
+//        }
+//
+//        if($order instanceof WC_Order_Refund) {
+//            // Return and error if the order is refunded. May allow this in the future but some work may be required.
+//            return new WP_Error(
+//                ARALCO_SLUG . '_message',
+//                __('The requested order was already refunded and is not submittable to aralco.', ARALCO_SLUG)
+//            );
+//        }
+//
+//
+//        $aralco_order = array(
+//            'username' => ''
+//        );
+//
+//
+//        $out = '';
+//        $out .= 'items: ' . print_r($order->get_items(), true) . "\n";
+//        $out .= 'billing: ' . print_r($order->get_address(), true) . "\n";
+//        $out .= 'shipping: ' . print_r($order->get_address('shipping'), true) . "\n";
+//        $out .= 'subtotal: ' . print_r($order->get_subtotal(), true) . "\n";
+//        $out .= 'discounts: ' . print_r($order->get_discount_total(), true) . "\n";
+//        $out .= 'tax total: ' . print_r($order->get_tax_totals(), true) . "\n";
+//        $out .= 'total: ' . print_r($order->get_total(), true) . "\n";
+//        file_put_contents(get_temp_dir() . 'test.txt', $out);
+        return true;
+    }
 }

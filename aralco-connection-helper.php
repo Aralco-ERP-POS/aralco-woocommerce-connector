@@ -333,4 +333,100 @@ class Aralco_Connection_Helper {
             __('Server Time Fetch Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG)
         );
     }
+
+    /**
+     * Get an aralco user by a column name
+     *
+     * @param string $column valid columns are 'Id' or 'UserName'
+     * @param string $value The value to look up by
+     * @return false|array|WP_Error An array of the user information, False if the user Doesn't exist or WP_Error on an
+     * error
+     */
+    static function getCustomer($column, $value){
+        $options = get_option(ARALCO_SLUG . '_options');
+
+        $curl = curl_init();
+        curl_setopt($curl, CURLOPT_URL, $options[ARALCO_SLUG . '_field_api_location'] . 'api/Customer/Get?' . $column . '=' . $value);
+        curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false); // Disable SSL verification
+        curl_setopt($curl, CURLOPT_RETURNTRANSFER, true); // Return instead of printing
+        curl_setopt($curl, CURLOPT_HTTPHEADER, array(
+            'Authorization: Basic ' . $options[ARALCO_SLUG . '_field_api_token']
+        )); // Basic Auth
+        $data = curl_exec($curl); // Get cURL result body
+        $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        curl_close($curl); // Close the cURL handler
+
+        if($http_code == 200){
+            if ($data === 'null') {
+                return false;
+            }
+            return json_decode($data, true);
+        }
+
+        $message = "Unknown Error";
+        if(isset($data)){
+            if(strpos($data, '{') !== false){
+                $data = json_decode($data, true);
+                $message = $data['message'] . ' ';
+                if(isset($data['exceptionMessage'])){
+                    $message .= $data['exceptionMessage'];
+                }
+            }else{
+                $message = $data;
+            }
+        }
+
+        return new WP_Error(
+            ARALCO_SLUG . '_get_customer_error',
+            __('Customer Fetch Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG)
+        );
+    }
+
+    /**
+     * @param $customer
+     * @return int|WP_Error The id of the newly created
+     */
+    static function createCustomer($customer) {
+        if(!Aralco_Connection_Helper::hasValidConfig()){
+            return new WP_Error(ARALCO_SLUG . '_invalid_config', 'You must save the connection settings before you can preform this action.');
+        }
+        $options = get_option(ARALCO_SLUG . '_options');
+        $curl = curl_init();
+        curl_setopt($curl, CURLOPT_URL, $options[ARALCO_SLUG . '_field_api_location'] .
+                                        'api/Customer/Post');
+        curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false); // Disable SSL verification
+        curl_setopt($curl, CURLOPT_RETURNTRANSFER, true); // Return instead of printing
+        curl_setopt($curl, CURLOPT_HTTPHEADER, array(
+            'Authorization: Basic ' . $options[ARALCO_SLUG . '_field_api_token'],
+            'Content-Type: application/json; charset=utf-8'
+        )); // Basic Auth and Content-Type for post
+        curl_setopt($curl, CURLOPT_POST, 1); // Set to POST instead of GET
+        curl_setopt($curl, CURLOPT_POSTFIELDS, json_encode($customer)); // Set Body
+        $data = curl_exec($curl); // Get cURL result body
+        $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        curl_close($curl); // Close the cURL handler
+
+        $baseInfo['CustomData'] = array();
+        if($http_code == 200){
+            return intval($data); // Return customer ID
+        }
+
+        $message = "Unknown error";
+        if (isset($data)){
+            if(strpos($data, '{') !== false){
+                $data = json_decode($data, true);
+                $message = $data['message'] . ' ';
+                if(isset($data['exceptionMessage'])){
+                    $message .= $data['exceptionMessage'];
+                }
+            } else {
+                $message = $data;
+            }
+        }
+
+        return new WP_Error(
+            ARALCO_SLUG . '_connection_failed',
+            __('Customer Creation Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG)
+        );
+    }
 }
