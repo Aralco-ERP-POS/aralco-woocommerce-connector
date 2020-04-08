@@ -3,18 +3,18 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.0.0
+ * Version: 1.2.0
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
- * Tested up to: 5.3.2
+ * Tested up to: 5.4
  * Text Domain: aralco_woocommerce_connector
  * Domain Path: /languages/
- * WC requires at least: 3.9
- * WC tested up to: 3.9.2
+ * WC requires at least: 4.0
+ * WC tested up to: 4.0.1
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.1.0
+ * @version 1.2.0
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -230,6 +230,7 @@ class Aralco_WooCommerce_Connector {
                 'label_for' => ARALCO_SLUG . '_field_default_order_email',
                 'class' => ARALCO_SLUG . '_row',
                 'placeholder' => 'john@example.com',
+                'required' => 'required',
                 'description' => 'Required for guest checkout. Please provide an email that is attached to a valid customer profile in Aralco. Not providing one will result in an error if a guest checks out.'
             ]
         );
@@ -250,6 +251,22 @@ class Aralco_WooCommerce_Connector {
                 'placeholder' => '1',
                 'required' => 'required',
                 'description' => 'The ID of the store to submit new orders to.'
+            ]
+        );
+
+        add_settings_field(
+            ARALCO_SLUG . '_field_tender_code',
+            __('Tender Code', ARALCO_SLUG),
+            array($this, 'field_input'),
+            ARALCO_SLUG,
+            ARALCO_SLUG . '_order_section',
+            [
+                'type' => 'text',
+                'label_for' => ARALCO_SLUG . '_field_tender_code',
+                'class' => ARALCO_SLUG . '_row',
+                'placeholder' => 'VI',
+                'required' => 'required',
+                'description' => 'The tender code to map ecommerce payment to.'
             ]
         );
     }
@@ -519,20 +536,21 @@ class Aralco_WooCommerce_Connector {
     public function new_customer($user_id) {
         $id = Aralco_Processing_Helper::process_new_customer($user_id);
         if(!$id || $id instanceof WP_Error) return;
-        update_user_meta($user_id, 'aralco_data', $id);
+        update_user_meta($user_id, 'aralco_data', array('id' => $id));
+        $this->customer_login(get_user_by('ID', $user_id)->user_login);
     }
 
     /**
      * Get aralco info for user that just logged in and cache it
      *
-     * @param string $user_login the username
-     * @param WP_User $user the user object
+     * @param string $username the user's name
      */
-    public function customer_login($user_login, $user) {
-        $aralcoId = get_user_meta($user->ID, 'aralco_id', true);
-        if (!empty($aralcoId)) {
+    public function customer_login($username) {
+        $user = get_user_by('login', $username);
+        $aralco_data = get_user_meta($user->ID, 'aralco_data', true);
+        if (!empty($aralco_data)) {
             // aralco id was found, pull the data.
-            $data = Aralco_Connection_Helper::getCustomer('Id', $aralcoId);
+            $data = Aralco_Connection_Helper::getCustomer('Id', $aralco_data['id']);
         } else {
             // aralco id wasn't found. Let's try pulling by email instead.
             $data = Aralco_Connection_Helper::getCustomer('UserName', $user->user_email);
@@ -543,10 +561,7 @@ class Aralco_WooCommerce_Connector {
             return;
         }
 
-        if (empty($aralcoId)){
-            // Save the ID so we don't have to look it up by email again.
-            update_user_meta($user->ID, 'aralco_id', $data['id']);
-        }
+        unset($data['password']); // Saving this to the DB would be confusing since we don't use it.
 
         update_user_meta($user->ID, 'aralco_data', $data);
     }

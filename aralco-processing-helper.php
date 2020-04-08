@@ -667,45 +667,116 @@ class Aralco_Processing_Helper {
      * instance if something went wrong
      */
     static function process_order($order_id) {
-//        $options = get_option(ARALCO_SLUG . '_options');
-//
-//        if(!isset($options[ARALCO_SLUG . '_field_order_enabled']) || $options[ARALCO_SLUG . '_field_order_enabled'] != true) {
-//            // Do nothing id you don't have orders enabled in settings
-//            return false;
-//        }
-//
-//        $order = wc_get_order($order_id);
-//        if(!$order) {
-//            // Return and error if the order dose not exist
-//            return new WP_Error(
-//                ARALCO_SLUG . '_message',
-//                __('No order was found for the requested order ID', ARALCO_SLUG)
-//            );
-//        }
-//
-//        if($order instanceof WC_Order_Refund) {
-//            // Return and error if the order is refunded. May allow this in the future but some work may be required.
-//            return new WP_Error(
-//                ARALCO_SLUG . '_message',
-//                __('The requested order was already refunded and is not submittable to aralco.', ARALCO_SLUG)
-//            );
-//        }
-//
-//
-//        $aralco_order = array(
-//            'username' => ''
-//        );
-//
-//
-//        $out = '';
-//        $out .= 'items: ' . print_r($order->get_items(), true) . "\n";
-//        $out .= 'billing: ' . print_r($order->get_address(), true) . "\n";
-//        $out .= 'shipping: ' . print_r($order->get_address('shipping'), true) . "\n";
-//        $out .= 'subtotal: ' . print_r($order->get_subtotal(), true) . "\n";
-//        $out .= 'discounts: ' . print_r($order->get_discount_total(), true) . "\n";
-//        $out .= 'tax total: ' . print_r($order->get_tax_totals(), true) . "\n";
-//        $out .= 'total: ' . print_r($order->get_total(), true) . "\n";
-//        file_put_contents(get_temp_dir() . 'test.txt', $out);
-        return true;
+        $options = get_option(ARALCO_SLUG . '_options');
+
+        if(!isset($options[ARALCO_SLUG . '_field_order_enabled']) || $options[ARALCO_SLUG . '_field_order_enabled'] != true) {
+            // Do nothing id you don't have orders enabled in settings
+            return false;
+        }
+
+        $order = wc_get_order($order_id);
+        if(!$order) {
+            // Return and error if the order dose not exist
+            return new WP_Error(
+                ARALCO_SLUG . '_message',
+                __('No order was found for the requested order ID', ARALCO_SLUG)
+            );
+        }
+
+        if($order instanceof WC_Order_Refund) {
+            // Return and error if the order is refunded. May allow this in the future but some work may be required.
+            return new WP_Error(
+                ARALCO_SLUG . '_message',
+                __('The requested order was already refunded and is not submittable to aralco.', ARALCO_SLUG)
+            );
+        }
+
+        $aralco_user = array();
+        if($order->get_user()){ // If not a guest
+            $temp = get_user_meta($order->get_user()->ID, 'aralco_data', true); // Get aralco data
+            if ($temp && !empty($temp)) { // If got aralco data
+                $aralco_user = $temp; // Set it
+            }
+        }
+
+        $aralco_order = array(
+            'username'   => (isset($aralco_user['email'])) ? $aralco_user['email'] : $options[ARALCO_SLUG . '_field_default_order_email'],
+            'storeId'    => $options[ARALCO_SLUG . '_field_store_id'],
+            'items'      => array(),
+            'weborderid' => $order_id,
+            'payment'         => array(
+                'paymentMethod'       => 'CC-' . $options[ARALCO_SLUG . '_field_tender_code'] . '-****************',
+                'message'             => $order->get_payment_method_title(),
+                'AuthorizationNumber' => '12345', // TODO: get real Auth Number
+                'ReferenceNumber'     => '1234', // TODO: get real Ref Number
+                'status'              => '1',
+                'subTotal'            => strval($order->get_subtotal()),
+                'tax'                 => $order->get_total_tax(),
+                'shipping'            => $order->get_shipping_total(),
+                'total'               => $order->get_total(),
+                'totalPaid'           => ($order->is_paid()) ? $order->get_total() : '0.00',
+                'totalDue'            => ($order->is_paid()) ? '0.00' : $order->get_total()
+            ),
+            'shippingAddress' => array(
+                'name'          => $order->get_shipping_first_name(),
+                'surname'       => $order->get_shipping_last_name(),
+                'companyName'   => $order->get_shipping_company(),
+                'address1'      => $order->get_shipping_address_1(),
+                'address2'      => $order->get_shipping_address_2(),
+                'city'          => $order->get_shipping_city(),
+                'provinceState' => $order->get_shipping_state(),
+                'country'       => $order->get_shipping_country(),
+                'zipPostalCode' => $order->get_shipping_postcode()
+            ),
+            'billingAddress'  => array(
+                'name'          => $order->get_billing_first_name(),
+                'surname'       => $order->get_billing_last_name(),
+                'companyName'   => $order->get_billing_company(),
+                'address1'      => $order->get_billing_address_1(),
+                'address2'      => $order->get_billing_address_2(),
+                'city'          => $order->get_billing_city(),
+                'provinceState' => $order->get_billing_state(),
+                'country'       => $order->get_billing_country(),
+                'zipPostalCode' => $order->get_billing_postcode()
+            )
+        );
+
+        $subTotal = 0.0;
+        /**
+         * @var $item WC_Order_Item_Product
+         */
+        foreach ($order->get_items() as $item){
+            $product = $item->get_product();
+            $price = round(floatval($item->get_subtotal()) / floatval($item->get_quantity()), 2);
+            array_push($aralco_order['items'], array(
+                'productId'    => intval(get_post_meta($product->get_id(), '_aralco_id', true)),
+                'code'         => $product->get_sku(),
+                'price'        => $price,
+                'discount'     => 0,
+                'quantity'     => $item->get_quantity(),
+                'weight'       => 0,
+                'gridId1'      => null,
+                'gridId2'      => null,
+                'gridId3'      => null,
+                'gridId4'      => null,
+                'dimensionId1' => null,
+                'dimensionId2' => null,
+                'dimensionId3' => null,
+                'dimensionId4' => null
+//                'remark'       => ''
+            ));
+            $subTotal += $price;
+        }
+
+        $result = Aralco_Connection_Helper::createOrder($aralco_order);
+        if (!$result instanceof WP_Error) {
+            return true;
+        }
+
+        $out = 'order: ' . json_encode($aralco_order, JSON_PRETTY_PRINT) . "\n" .
+               'result: ' . print_r($result, true) . "\n\n";
+        file_put_contents(get_temp_dir() . 'test.txt', $out, FILE_APPEND);
+
+        return $result;
     }
 }
