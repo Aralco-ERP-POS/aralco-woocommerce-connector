@@ -21,7 +21,7 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
 
 define('ARALCO_SLUG', 'aralco_woocommerce_connector');
 
-add_filter( 'jetpack_development_mode', '__return_true' ); //TODO: Remove when done
+//add_filter( 'jetpack_development_mode', '__return_true' ); //TODO: Remove when done
 
 require_once "aralco-util.php";
 require_once "aralco-admin-settings-input-validation.php";
