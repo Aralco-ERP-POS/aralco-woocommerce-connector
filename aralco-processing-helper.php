@@ -468,6 +468,8 @@ class Aralco_Processing_Helper {
 
         $count = 0;
 
+        $serialInventory = array();
+
         foreach ($inventory as $index => $item){
             $args = array(
                 'posts_per_page' => 1,
@@ -480,21 +482,41 @@ class Aralco_Processing_Helper {
             if(count($results) <= 0) continue; // Product not found. Abort
             $product_id = $results[0]->ID;
 
-            // TODO: handle grid and serial stock.
-            $managed = $item['GridID1'] == 0 && $item['GridID2'] == 0 && $item['GridID3'] == 0 && $item['GridID4'] == 0 && empty($item['SerialNumber']);
+            // TODO: handle grid.
+            $managed = $item['GridID1'] == 0 && $item['GridID2'] == 0 && $item['GridID3'] == 0 && $item['GridID4'] == 0;
+
+            if($managed && !empty($item['SerialNumber'])){
+                if (!isset($serialInventory[$item['ProductID']])){
+                    $serialInventory[$item['ProductID']] = 0;
+                }
+                if ($item['Available'] > 0) $serialInventory[$item['ProductID']]++;
+                continue; //We will deal with those items later
+            }
 
             update_post_meta($product_id, '_manage_stock', ($managed) ? 'yes' : 'no');
             update_post_meta($product_id, '_backorders', 'notify');
             update_post_meta($product_id, '_stock', ($managed) ? $item['Available'] : 0);
             update_post_meta($product_id, '_stock_status', ($item['Available'] >= 1 || !$managed) ? 'instock' : 'onbackorder');
-//            $product = wc_get_product($results[0]->ID);
-//            $product->set_manage_stock($managed);
-//            $product->set_backorders('notify');
-//            $product->set_stock_quantity($item['Available']);
-//            $product->set_stock_status(($item['Available'] >= 1 || !$managed) ? 'instock' : 'onbackorder');
-//            $product->save();
             $count++;
         }
+
+        foreach ($serialInventory as $index => $item){
+            $args = array(
+                'posts_per_page' => 1,
+                'post_type'      => 'product',
+                'meta_key'       => '_aralco_id',
+                'meta_value'     => strval($index)
+            );
+            $results = (new WP_Query($args))->get_posts();
+            $product_id = $results[0]->ID;
+
+            update_post_meta($product_id, '_manage_stock', 'yes');
+            update_post_meta($product_id, '_backorders', 'notify');
+            update_post_meta($product_id, '_stock', $item);
+            update_post_meta($product_id, '_stock_status', ($item >= 1) ? 'instock' : 'onbackorder');
+            $count++;
+        }
+
         update_option(ARALCO_SLUG . '_last_sync_stock_count', $count);
 
         try{
