@@ -74,6 +74,7 @@ class Aralco_Processing_Helper {
 //                if ($count >= 20) break; //TODO: Remove when done testing
             }
             try{
+                /** @noinspection PhpUndefinedVariableInspection */
                 $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
                 update_option(ARALCO_SLUG . '_last_sync_duration_products', $time_taken);
             } catch(Exception $e) {}
@@ -81,8 +82,12 @@ class Aralco_Processing_Helper {
             if(count($errors) > 0){
                 return $errors;
             }
-            update_option(ARALCO_SLUG . '_last_sync', date("Y-m-d\TH:i:s"));
             update_option(ARALCO_SLUG . '_last_sync_product_count', $count);
+
+            $error = Aralco_Processing_Helper::sync_stock($lastSync);
+            if ($error instanceof WP_Error) return $error;
+
+            update_option(ARALCO_SLUG . '_last_sync', date("Y-m-d\TH:i:s"));
             return true;
         }
         return $result;
@@ -156,11 +161,10 @@ class Aralco_Processing_Helper {
             $product->set_total_sales(0);
             $product->set_downloadable(false);
             $product->set_virtual(false);
-//            $product->set_manage_stock(false);
-            $product->set_backorders('yes');
+            $product->set_backorders('notify');
+            $product->set_manage_stock(false);
         }
 
-        $product->set_manage_stock(false); // TODO: Remove later?
         $product->set_name($item['Product']['Name']);
         $product->set_description($item['Product']['Description']);
         $product->set_short_description($item['Product']['SeoDescription']);
@@ -443,6 +447,62 @@ class Aralco_Processing_Helper {
             }
         }
         return $combos;
+    }
+
+    /**
+     * Syncs the product inventory
+     *
+     * @param string $lastSync the date and time of the last sync. Default 1900-01-01T00:00:00
+     * @return bool|WP_Error true if the inventory sync succeeded, otherwise an instance of WP_Error
+     */
+    static function sync_stock($lastSync = '1900-01-01T00:00:00'){
+//        $lastSync = '1900-01-01T00:00:00'; //TODO: REMOVE WHEN DONE TESTING
+        if (substr($lastSync, 0, 1) == '1') set_time_limit(0);
+
+        try{
+            $start_time = new DateTime();
+        } catch(Exception $e) {}
+
+        $inventory = Aralco_Connection_Helper::getProductStock($lastSync);
+        if($inventory instanceof WP_Error) return $inventory;
+
+        $count = 0;
+
+        foreach ($inventory as $index => $item){
+            $args = array(
+                'posts_per_page' => 1,
+                'post_type'      => 'product',
+                'meta_key'       => '_aralco_id',
+                'meta_value'     => strval($item['ProductID'])
+            );
+
+            $results = (new WP_Query($args))->get_posts();
+            if(count($results) <= 0) continue; // Product not found. Abort
+            $product_id = $results[0]->ID;
+
+            // TODO: handle grid and serial stock.
+            $managed = $item['GridID1'] == 0 && $item['GridID2'] == 0 && $item['GridID3'] == 0 && $item['GridID4'] == 0 && empty($item['SerialNumber']);
+
+            update_post_meta($product_id, '_manage_stock', ($managed) ? 'yes' : 'no');
+            update_post_meta($product_id, '_backorders', 'notify');
+            update_post_meta($product_id, '_stock', ($managed) ? $item['Available'] : 0);
+            update_post_meta($product_id, '_stock_status', ($item['Available'] >= 1 || !$managed) ? 'instock' : 'onbackorder');
+//            $product = wc_get_product($results[0]->ID);
+//            $product->set_manage_stock($managed);
+//            $product->set_backorders('notify');
+//            $product->set_stock_quantity($item['Available']);
+//            $product->set_stock_status(($item['Available'] >= 1 || !$managed) ? 'instock' : 'onbackorder');
+//            $product->save();
+            $count++;
+        }
+        update_option(ARALCO_SLUG . '_last_sync_stock_count', $count);
+
+        try{
+            /** @noinspection PhpUndefinedVariableInspection */
+            $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
+            update_option(ARALCO_SLUG . '_last_sync_duration_stock', $time_taken);
+        } catch(Exception $e) {}
+        return true;
     }
 
     /**

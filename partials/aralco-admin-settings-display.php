@@ -98,6 +98,13 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
             echo ($count !== false ? $count : '0') . ' Products in ' .
                  ($time_taken !== false ? $time_taken : '0') . ' seconds.'
         ?></li><li>&bull; <?php
+            $time_taken = get_option(ARALCO_SLUG . '_last_sync_duration_stock');
+            $count = get_option(ARALCO_SLUG . '_last_sync_stock_count');
+            if ($time_taken > 0) $total_run_tiume += $time_taken;
+            if ($count > 0) $total_records += $count;
+            echo ($count !== false ? $count : '0') . ' Stock changes in ' .
+                 ($time_taken !== false ? $time_taken : '0') . ' seconds.'
+        ?></li><li>&bull; <?php
             echo $total_records . ' Total entries updated in ' . $total_run_tiume . ' seconds.'
         ?></li></ul>
         <input type="hidden" name="sync-now" value="1">
