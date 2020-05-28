@@ -58,8 +58,6 @@ class Aralco_Processing_Helper {
         if(is_array($result)){ // Got Data
             // Sorting the array so items are processed in a consistent order (makes it easier for testing)
             usort($result, function($a, $b){
-//                if($a['ProductID'] == 2740) return -1;
-//                if($b['ProductID'] == 2740) return 1; //TODO: Remove when done testing
                 return $a['ProductID'] <=> $b['ProductID'];
             });
 
@@ -137,15 +135,18 @@ class Aralco_Processing_Helper {
 
         update_post_meta($post_id, '_sku', $item['Product']['Code']);
         update_post_meta($post_id, '_visibility', 'visible');
+        update_post_meta($post_id, '_aralco_id', $item['ProductID']);
 
-//        if($item['Product']['HasDimension']){
-//            wp_set_object_terms($post_id, 'variable', 'product_type', true);
-//            Aralco_Processing_Helper::process_product_variations($post_id, $item);
+        $has_dim = $item['Product']['HasDimension'];
+
+        if($has_dim){
+            wp_set_object_terms($post_id, 'variable', 'product_type', true);
+            $result = Aralco_Processing_Helper::process_product_variations($post_id, $item);
+            if ($result instanceof WP_Error) return $result;
 //            Aralco_Processing_Helper::process_item_images($post_id, $item);
-//            delete_transient( 'wc_product_children_' . $post_id );
-//            delete_transient( 'wc_var_prices_' . $post_id );
-//            return true;
-//        }
+            delete_transient( 'wc_product_children_' . $post_id );
+            delete_transient( 'wc_var_prices_' . $post_id );
+        }
 
         /**
          * @var $product false|null|WC_Product_Simple|WC_Product_Variable
@@ -153,26 +154,30 @@ class Aralco_Processing_Helper {
         $product = wc_get_product($post_id);
 
         if($is_new){
-            $product->add_meta_data('_aralco_id', $item['ProductID'], true);
             try{
                 $product->set_catalog_visibility('visible');
             } catch(Exception $e) {}
-            $product->set_stock_status('instock');
-            $product->set_total_sales(0);
-            $product->set_downloadable(false);
-            $product->set_virtual(false);
-            $product->set_backorders('notify');
-            $product->set_manage_stock(false);
+            if(!$has_dim) {
+                $product->set_stock_status('instock');
+                $product->set_total_sales(0);
+                $product->set_downloadable(false);
+                $product->set_virtual(false);
+                $product->set_manage_stock(false);
+                $product->set_backorders('notify');
+            }
         }
 
         $product->set_name($item['Product']['Name']);
         $product->set_description($item['Product']['Description']);
         $product->set_short_description($item['Product']['SeoDescription']);
-        $product->set_regular_price($item['Product']['Price']);
-        $product->set_sale_price(
-            isset($item['Product']['DiscountPrice'])? $item['Product']['DiscountPrice'] : $item['Product']['Price']
-        );
-        $product->set_featured($item['Product']['Featured'] === true);
+        if(!$has_dim) {
+            $product->set_regular_price($item['Product']['Price']);
+            $product->set_sale_price(
+                isset($item['Product']['DiscountPrice']) ? $item['Product']['DiscountPrice'] : $item['Product']['Price']
+            );
+            $product->set_price(isset($item['Product']['DiscountPrice'])? $item['Product']['DiscountPrice'] : $item['Product']['Price']);
+        }
+        $product->set_featured(($item['Product']['Featured'] === true) ? 'yes' : 'no');
         if(isset($item['Product']['WebProperties']['Weight'])){
             $product->set_weight($item['Product']['WebProperties']['Weight']);
         }
@@ -185,13 +190,12 @@ class Aralco_Processing_Helper {
         if(isset($item['Product']['WebProperties']['Height'])){
             $product->set_height($item['Product']['WebProperties']['Height']);
         }
-        try{
-            $product->set_sku($item['Product']['Code']);
-        } catch(Exception $e) {}
+//        try{
+//            $product->set_sku($item['Product']['Code']);
+//        } catch(Exception $e) {}
 //        update_post_meta($post_id, '_product_attributes', array());
 //        update_post_meta($post_id, '_sale_price_dates_from', '');
 //        update_post_meta($post_id, '_sale_price_dates_to', '');
-        $product->set_price(isset($item['Product']['DiscountPrice'])? $item['Product']['DiscountPrice'] : $item['Product']['Price']);
 //        update_post_meta($post_id, '_sold_individually', '');
 //        wc_update_product_stock($post_id, $single['qty'], 'set');
 //        update_post_meta( $post_id, '_stock', $single['qty'] );
@@ -205,7 +209,6 @@ class Aralco_Processing_Helper {
         $product->save();
 
         Aralco_Processing_Helper::process_item_images($post_id, $item);
-//        Aralco_Processing_Helper::process_product_variations($product, $item); //TODO: Fix this
         return true;
     }
 
@@ -270,183 +273,199 @@ class Aralco_Processing_Helper {
     }
 
     /**
-     * Based on https://stackoverflow.com/questions/47518280 but heavily modified.
-     * Create a product variation for a defined variable product.
+     * Creates all product variations for a defined variable product.
+     *
+     * Based on https://stackoverflow.com/questions/47518280
      *
      * @param int $post_id The product id
      * @param array $aralco_product The data from aralco about the product
      * @return bool|WP_Error
      */
     static function process_product_variations($post_id, $aralco_product){
-        // Fetch the grids for this item and assign grids to product
-        $grids = array();
-        $available_attributes = array();
-        for ($i = 1; $i <= 4; $i++){
-            if(isset($aralco_product['Product']['DimensionId' . $i])){
-                $terms = array();
-                $grids['grid' . $i] = get_terms(array(
+
+        // Build and register attributes
+        $product_attributes = array();
+        for ($i = 1; $i < 5; $i++) {
+            $dim_id = $aralco_product['Product']['DimensionId' . $i];
+            if (isset($dim_id) && !empty($dim_id)) {
+                $terms_temp = get_terms([
+                    'taxonomy' => wc_attribute_taxonomy_name('grid-' . $dim_id),
                     'hide_empty' => false,
-                    'taxonomy'   => wc_attribute_taxonomy_name('grid-' . $aralco_product['Product']['DimensionId' . $i])
-                ));
-                /**
-                 * @var $grid WP_Term
-                 */
-                foreach($grids['grid' . $i] as $grid){
-                    array_push($terms, $grid->name);
+                ]);
+                if ($terms_temp instanceof WP_Error) return $terms_temp;
+                if (is_numeric($terms_temp)) return new WP_Error(ARALCO_SLUG . '_invalid_terms',
+                    'get_terms did not return a list of terms for taxonomy ' .
+                    wc_attribute_taxonomy_name('grid-' . $dim_id));
+                $terms = array();
+                foreach ($terms_temp as $term_temp){
+                    array_push($terms, $term_temp->name);
                 }
-                wp_set_object_terms($post_id, $terms, wc_attribute_taxonomy_name(
-                    'grid-' . $aralco_product['Product']['DimensionId' . $i]), true);
-
-                array_push($available_attributes, 'grid-' . $aralco_product['Product']['DimensionId' . $i]);
-            } else break;
-        }
-
-        if (count($grids) == 0) return true; // Nothing to do.
-
-        $product_attributes_data = array();
-        foreach($available_attributes as $attribute_name){
-            $product_attributes_data[$attribute_name] = array(
-                'name'          => $attribute_name,
-                'value'         => '',
-                'is_visible'    => '1',
-                'is_variation'  => '1',
-                'is_taxonomy'   => '1'
-            );
-        }
-
-        update_post_meta($post_id, '_product_attributes', $product_attributes_data);
-
-        // Generate a list of possible combinations
-        $combos = Aralco_Processing_Helper::generate_grid_sets($grids);
-
-        // DEBUG
-//        print_r(array(
-//            'product' => array(
-//                'id' => $aralco_product['ProductID'],
-//                'code' => $aralco_product['Product']['Code'],
-//                'name' => $aralco_product['Product']['Name']
-//            ),
-//            'grids' => $grids,
-//            'combos' => $combos
-//        ));
-
-        foreach ($combos as $index => $combo){
-            $variation_post = array(
-                'post_title'  => 'Variation #' . ($index + 1) . ' of ' . count($combos) . ' for product #' . $post_id ,
-                'post_name'   => 'product-'.$post_id.'-variation'.$index,
-                'post_status' => 'publish',
-                'post_parent' => $post_id,
-                'post_type'   => 'product_variation',
-                'guid'        => home_url() . '/?product_variation=product-' . $post_id . '-variation-' . $index
-            );
-
-            // Creating the product variation
-            $variation_id = wp_insert_post($variation_post);
-
-            if ($variation_id instanceof WP_Error) {
-                print_r($variation_id);
-                return false;
+                $product_attributes[wc_attribute_taxonomy_name('grid-' . $dim_id)] = array(
+                    'name' => wc_attribute_taxonomy_name('grid-' . $dim_id),
+                    'value' => '',
+                    'position' => $i,
+                    'is_visible' => '1',
+                    'is_variation' => '1',
+                    'is_taxonomy' => '1'
+                );
+                if(count($terms) > 0) {
+                    wp_set_object_terms($post_id, $terms, wc_attribute_taxonomy_name('grid-' . $dim_id));
+                }
             }
-            /**
-             * @var $value WP_Term
-             */
-            foreach($combo as $key => $value){
-//                $attribute_term = get_term_by('name', $value, wc_attribute_taxonomy_name(
-//                    'grid-' . $aralco_product['Product']['DimensionId' . ($key + 1)]));
-                update_post_meta($variation_id, 'attribute_' . wc_attribute_taxonomy_name(
-                        'grid-' . $aralco_product['Product']['DimensionId' . ($key + 1)]), $value->slug);
+        }
+        if(count($product_attributes) > 0){
+            update_post_meta($post_id, '_product_attributes', $product_attributes);
+        } else {
+            return true; // Nothing to do. Product has no valid attributes.
+        }
+
+
+        // Get the product variation/grids that were created in Aralco for this product
+        $combos = Aralco_Connection_Helper::getProductBarcodes($aralco_product['ProductID']);
+        if ($combos instanceof WP_Error) return $combos;
+
+        // Loop through and create each product variation
+        foreach ($combos as $combo){
+            $attributes = array();
+            foreach ($combo['Grids'] as $i => $grid){
+                if(isset($grid['GridID']) && !empty($grid['GridID'])){
+                    $attributes[wc_attribute_taxonomy_name('grid-' . $aralco_product['Product']['DimensionId' . ($i + 1)])] = $grid['GridValue'];
+                }
             }
 
-            update_post_meta($variation_id, '_price',
-                isset($aralco_product['Product']['DiscountPrice'])?
-                    $aralco_product['Product']['DiscountPrice'] : $aralco_product['Product']['Price']);
-            update_post_meta($variation_id, '_regular_price', $aralco_product['Product']['Price']);
+            $uid = (string) $aralco_product['ProductID'] . (string) $combo['Grids'][0]['GridID'] .
+                (string) $combo['Grids'][1]['GridID'] . (string) $combo['Grids'][2]['GridID'] .
+                (string) $combo['Grids'][3]['GridID'];
 
-//            // Get an instance of the WC_Product_Variation object
-//            $variation = new WC_Product_Variation($variation_id);
-//
-//            // Iterating through the variations attributes
-//            /**
-//             * Type hint for IDE
-//             * @var $term WP_Term
-//             */
-//            foreach ($combo as $key => $term) {
-//
-//                $taxonomy = wc_attribute_taxonomy_name('grid-' . $aralco_product['Product']['DimensionId' . ($key + 1)]);
-//
-////                // Get the post Terms names from the parent variable product.
-////                $post_term_names = wp_get_post_terms( $product->get_id(), $taxonomy, array('fields' => 'names') );
-////
-////                // Check if the post term exist and if not we set it in the parent variable product.
-////                if( ! in_array( $term->name, $post_term_names ) )
-////                    wp_set_post_terms( $product->get_id(), $term->name, $taxonomy, true );
-//
-//                // Set/save the attribute data in the product variation
-//                update_post_meta( $variation_id, 'attribute_'.$taxonomy, $term );
-//            }
-//
-//            ## Set/save all other data
-//
-//            // SKU
-////            try{
-////                $variation->set_sku($aralco_product['Product']['Code']);
-////            }catch(Exception $e){}
-//
-//            // Prices
-//            $variation->set_price(isset($aralco_product['Product']['DiscountPrice'])?
-//                $aralco_product['Product']['DiscountPrice'] : $aralco_product['Product']['Price']);
-//            $variation->set_sale_price(isset($aralco_product['Product']['DiscountPrice']) ?
-//                $aralco_product['Product']['DiscountPrice'] : $aralco_product['Product']['Price']);
-//            $variation->set_regular_price($aralco_product['Product']['Price']);
-//
-//            // Stock
-////            if( ! empty($variation_data['stock_qty']) ){
-////                $variation->set_stock_quantity( $variation_data['stock_qty'] );
-////                $variation->set_manage_stock(true);
-////                $variation->set_stock_status('');
-////            } else {
-//                $variation->set_manage_stock(false);
-////            }
-//
-////            $variation->set_weight(''); // weight (reseting)
-//
-//            $variation->save(); // Save the data
+            $args = array(
+                'posts_per_page'    => 1,
+                'post_type'         => 'product_variation',
+                'meta_key'          => '_aralco_grid_uid',
+                'meta_value'        => $uid
+            );
+
+            $results = (new WP_Query($args))->get_posts();
+
+            if(count($results) <= 0) {
+                // Get the Variable product object (parent)
+                $product = wc_get_product($post_id);
+
+                $variation_post = array(
+                    'post_title' => $product->get_name(),
+                    'post_name' => 'product-' . $post_id . '-variation',
+                    'post_status' => 'publish',
+                    'post_parent' => $post_id,
+                    'post_type' => 'product_variation',
+                    'guid' => $product->get_permalink()
+                );
+
+                // Creating the product variation
+                $variation_id = wp_insert_post($variation_post);
+
+                $_aralco_grids = array();
+                for($i = 1; $i < 5; $i++){
+                    if(isset($aralco_product['Product']['DimensionId' . $i]) &&
+                        !empty($aralco_product['Product']['DimensionId' . $i])){
+                        $_aralco_grids['dimensionId' . $i] = $aralco_product['Product']['DimensionId' . $i];
+                        $_aralco_grids['gridId' . $i] = $combo['Grids'][$i - 1]['GridID'];
+                    }
+                }
+                update_post_meta($variation_id, '_aralco_grids', $_aralco_grids);
+
+                update_post_meta($variation_id, '_aralco_grid_uid', $uid);
+            } else {
+                $variation_id = $results[0]->ID;
+            }
+
+            // Get an instance of the WC_Product_Variation object
+            $variation = new WC_Product_Variation( $variation_id );
+
+            // Iterating through the variations attributes
+            foreach ($attributes as $taxonomy => $term_name){
+                if(!taxonomy_exists($taxonomy)){
+                    return new WP_Error(ARALCO_SLUG . '_taxonomy_missing', 'The requested taxonomy "' .
+                        $taxonomy . '" does not exist.');
+                }
+
+                // Check if the Term name exist.
+                if(!term_exists($term_name, $taxonomy)) {
+                    return new WP_Error(ARALCO_SLUG . '_term_missing', 'The requested taxonomy term "' .
+                        $term_name . '" for taxonomy "' . $taxonomy . '" does not exist.');
+                }
+
+                $term_slug = get_term_by('name', $term_name, $taxonomy )->slug; // Get the term slug
+
+                // Get the post Terms names from the parent variable product.
+                $post_term_names =  wp_get_post_terms( $post_id, $taxonomy, array('fields' => 'names') );
+
+                // Check if the post term exist and if not we set it in the parent variable product.
+                if( ! in_array( $term_name, $post_term_names ) )
+                    wp_set_post_terms( $post_id, $term_name, $taxonomy, true );
+
+                // Set/save the attribute data in the product variation
+                update_post_meta( $variation_id, 'attribute_'.$taxonomy, $term_slug );
+            }
+
+            ## Set/save all other data
+
+            // SKU
+            try {
+                $variation->set_sku($aralco_product['Product']['Code']);
+            } catch (Exception $e) {
+                /* Ignored */
+            }
+
+            // Prices
+            if(isset($aralco_product['Product']['DiscountPrice'])) {
+                $variation->set_price($aralco_product['Product']['Price']);
+            } else {
+                $variation->set_price($aralco_product['Product']['DiscountPrice']);
+                $variation->set_sale_price($aralco_product['Product']['DiscountPrice']);
+            }
+            $variation->set_regular_price($aralco_product['Product']['Price']);
+
+            // Stock
+            $variation->set_manage_stock(true);
+            $variation->set_backorders('notify');
+            $variation->set_stock_status('');
+
+            if(isset($aralco_product['Product']['WebProperties']['Weight'])){
+                $variation->set_weight($aralco_product['Product']['WebProperties']['Weight']);
+            }
+            if(isset($aralco_product['Product']['WebProperties']['Length'])){
+                $variation->set_length($aralco_product['Product']['WebProperties']['Length']);
+            }
+            if(isset($aralco_product['Product']['WebProperties']['Width'])){
+                $variation->set_width($aralco_product['Product']['WebProperties']['Width']);
+            }
+            if(isset($aralco_product['Product']['WebProperties']['Height'])){
+                $variation->set_height($aralco_product['Product']['WebProperties']['Height']);
+            }
+
+            $variation->save(); // Save the data
         }
+//        // DEBUG INFO
+//        $post = get_post(52594);
+//        $post->post_content = '<pre>' . json_encode(array(
+//            'time' => (new DateTime('now'))->format('Y-m-d H:i:s'),
+//            'input' => $prod_attributes,
+//            'output' => $data
+//        ), JSON_PRETTY_PRINT) . '</pre>';
+//        wp_update_post($post);
         return true;
     }
 
     /**
-     * Given the grids of a product, a list of combinations is generated.
+     * Create a product variation for a defined variable product ID.
+     * DO NOT USE DIRECTLY. USE Aralco_Processing_Helper::process_product_variations()
      *
-     * @param array $grids the grids to generate combinations from
-     * @return array a unorded array of every possible grid combination
+     * @since 3.0.0
+     * @param int   $product_id | Post ID of the product parent variable product.
+     * @param array $variation_data | The data to insert in the product.
+     * @return WP_Error | true
      */
-    static function generate_grid_sets($grids){
-        $combos = array();
-        if (isset($grids['grid1'])) {
-            foreach($grids['grid1'] as $term1){
-                if (isset($grids['grid2'])){
-                    foreach($grids['grid2'] as $term2){
-                        if (isset($grids['grid3'])){
-                            foreach($grids['grid3'] as $term3){
-                                if (isset($grids['grid4'])){
-                                    foreach($grids['grid4'] as $term4){
-                                        array_push($combos, array($term1, $term2, $term3, $term4));
-                                    }
-                                } else {
-                                    array_push($combos, array($term1, $term2, $term3));
-                                }
-                            }
-                        } else {
-                            array_push($combos, array($term1, $term2));
-                        }
-                    }
-                } else {
-                    array_push($combos, array($term1));
-                }
-            }
-        }
-        return $combos;
+    static function create_product_variation( $product_id, $variation_data ){
+
     }
 
     /**
@@ -482,10 +501,33 @@ class Aralco_Processing_Helper {
             if(count($results) <= 0) continue; // Product not found. Abort
             $product_id = $results[0]->ID;
 
-            // TODO: handle grid.
-            $managed = $item['GridID1'] == 0 && $item['GridID2'] == 0 && $item['GridID3'] == 0 && $item['GridID4'] == 0;
+            if($item['GridID1'] != 0 || $item['GridID2'] != 0 || $item['GridID3'] != 0 || $item['GridID4'] != 0){
+                $variations = get_posts(array(
+                    'numberposts' => -1,
+                    'post_type' => 'product_variation',
+                    'post_parent' => $product_id,
+                ));
+                if(count($variations) <= 0) continue; // Nothing to do.
 
-            if($managed && !empty($item['SerialNumber'])){
+                $found = false;
+                foreach ($variations as $variation){
+                    $grids = get_post_meta($variation->ID, '_aralco_grids', true);
+                    if(!is_array($grids) || count($grids) <= 0) continue; // Nothing to do.
+                    if(
+                        isset($grids['gridId1']) && (string) $grids['gridId1'] == (string) $item['GridID1'] &&
+                        (!isset($grids['gridId2']) || (string) $grids['gridId2'] == (string) $item['GridID2']) &&
+                        (!isset($grids['gridId3']) || (string) $grids['gridId3'] == (string) $item['GridID3']) &&
+                        (!isset($grids['gridId4']) || (string) $grids['gridId4'] == (string) $item['GridID4'])
+                    ){
+                        $product_id = $variation->ID;
+                        $found = true;
+                        break;
+                    }
+                }
+                if (!$found) continue; // Nothing to do.
+            }
+
+            if(!empty($item['SerialNumber'])){
                 if (!isset($serialInventory[$item['ProductID']])){
                     $serialInventory[$item['ProductID']] = 0;
                 }
@@ -493,10 +535,10 @@ class Aralco_Processing_Helper {
                 continue; //We will deal with those items later
             }
 
-            update_post_meta($product_id, '_manage_stock', ($managed) ? 'yes' : 'no');
+            update_post_meta($product_id, '_manage_stock', 'yes');
             update_post_meta($product_id, '_backorders', 'notify');
-            update_post_meta($product_id, '_stock', ($managed) ? $item['Available'] : 0);
-            update_post_meta($product_id, '_stock_status', ($item['Available'] >= 1 || !$managed) ? 'instock' : 'onbackorder');
+            update_post_meta($product_id, '_stock', $item['Available']);
+            update_post_meta($product_id, '_stock_status', ($item['Available'] >= 1) ? 'instock' : 'onbackorder');
             $count++;
         }
 
@@ -868,21 +910,27 @@ class Aralco_Processing_Helper {
         foreach ($order->get_items() as $item){
             $product = $item->get_product();
             $price = round(floatval($item->get_subtotal()) / floatval($item->get_quantity()), 2);
+            $grids = get_post_meta($item->get_variation_id(), '_aralco_grids', true);
+            $aralco_product_id = get_post_meta($product->get_id(), '_aralco_id', true);
+            if($aralco_product_id == false) {
+                $aralco_product_id = get_post_meta($product->get_parent_id(), '_aralco_id', true);
+            }
+
             array_push($aralco_order['items'], array(
-                'productId'    => intval(get_post_meta($product->get_id(), '_aralco_id', true)),
+                'productId'    => intval($aralco_product_id),
                 'code'         => $product->get_sku(),
                 'price'        => $price,
                 'discount'     => 0,
                 'quantity'     => $item->get_quantity(),
                 'weight'       => 0,
-                'gridId1'      => null,
-                'gridId2'      => null,
-                'gridId3'      => null,
-                'gridId4'      => null,
-                'dimensionId1' => null,
-                'dimensionId2' => null,
-                'dimensionId3' => null,
-                'dimensionId4' => null
+                'gridId1'      => (is_array($grids) && isset($grids['gridId1']) && !empty($grids['gridId1'])) ? $grids['gridId1'] : null,
+                'gridId2'      => (is_array($grids) && isset($grids['gridId2']) && !empty($grids['gridId2'])) ? $grids['gridId2'] : null,
+                'gridId3'      => (is_array($grids) && isset($grids['gridId3']) && !empty($grids['gridId3'])) ? $grids['gridId3'] : null,
+                'gridId4'      => (is_array($grids) && isset($grids['gridId4']) && !empty($grids['gridId4'])) ? $grids['gridId4'] : null,
+                'dimensionId1' => (is_array($grids) && isset($grids['dimensionId1']) && !empty($grids['dimensionId1'])) ? $grids['dimensionId1'] : null,
+                'dimensionId2' => (is_array($grids) && isset($grids['dimensionId2']) && !empty($grids['dimensionId2'])) ? $grids['dimensionId2'] : null,
+                'dimensionId3' => (is_array($grids) && isset($grids['dimensionId3']) && !empty($grids['dimensionId3'])) ? $grids['dimensionId3'] : null,
+                'dimensionId4' => (is_array($grids) && isset($grids['dimensionId4']) && !empty($grids['dimensionId4'])) ? $grids['dimensionId4'] : null
 //                'remark'       => ''
             ));
             $subTotal += $price;
@@ -893,9 +941,9 @@ class Aralco_Processing_Helper {
             return true;
         }
 
-        $out = 'order: ' . json_encode($aralco_order, JSON_PRETTY_PRINT) . "\n" .
-               'result: ' . print_r($result, true) . "\n\n";
-        file_put_contents(get_temp_dir() . 'test.txt', $out, FILE_APPEND);
+//        $out = 'order: ' . json_encode($aralco_order, JSON_PRETTY_PRINT) . "\n" .
+//               'result: ' . print_r($result, true) . "\n\n";
+//        file_put_contents(get_temp_dir() . 'test.txt', $out, FILE_APPEND); //TODO Remove when done testing.
 
         return $result;
     }
