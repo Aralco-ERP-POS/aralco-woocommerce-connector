@@ -99,11 +99,13 @@ class Aralco_Processing_Helper {
      * @return bool|WP_Error
      */
     static function process_item($item) {
+        $returnVal = true;
         $args = array(
             'posts_per_page'    => 1,
             'post_type'         => 'product',
             'meta_key'          => '_aralco_id',
-            'meta_value'        => strval($item['ProductID'])
+            'meta_value'        => strval($item['ProductID']),
+            'post_status'       => array('publish', 'pending', 'draft', 'auto-draft', 'future', 'private', 'inherit', 'trash')
         );
 
         $results = (new WP_Query($args))->get_posts();
@@ -142,10 +144,22 @@ class Aralco_Processing_Helper {
         if($has_dim){
             wp_set_object_terms($post_id, 'variable', 'product_type', true);
             $result = Aralco_Processing_Helper::process_product_variations($post_id, $item);
-            if ($result instanceof WP_Error) return $result;
-//            Aralco_Processing_Helper::process_item_images($post_id, $item);
-            delete_transient( 'wc_product_children_' . $post_id );
-            delete_transient( 'wc_var_prices_' . $post_id );
+            if ($result instanceof WP_Error){
+                if($result->get_error_code() == ARALCO_SLUG . '_dimension_not_enabled'){
+                    $post = array('ID' => $post_id, 'post_status' => 'draft');
+                    wp_update_post($post);
+                    $returnVal = $result;
+                } else {
+                    return $result;
+                }
+            } else {
+                if(is_array($results) && count($results) > 0 && $results[0]->post_status != 'publish') {
+                    $post = array('ID' => $post_id, 'post_status' => 'publish');
+                    wp_update_post($post);
+                }
+                delete_transient( 'wc_product_children_' . $post_id );
+                delete_transient( 'wc_var_prices_' . $post_id );
+            }
         }
 
         /**
@@ -204,12 +218,17 @@ class Aralco_Processing_Helper {
         $term = get_term_by( 'slug', $slug, 'product_cat' );
         if($term instanceof WP_Term){
             $product->set_category_ids(array($term->term_id));
+        } else {
+            $term = get_term_by( 'slug', 'uncategorized', 'product_cat' );
+            if($term instanceof WP_Term) {
+                $product->set_category_ids(array($term->term_id));
+            }
         }
 
         $product->save();
 
         Aralco_Processing_Helper::process_item_images($post_id, $item);
-        return true;
+        return $returnVal;
     }
 
     static function process_item_images($post_id, $item){
@@ -285,6 +304,7 @@ class Aralco_Processing_Helper {
 
         // Build and register attributes
         $product_attributes = array();
+        $invalid_grids = array();
         for ($i = 1; $i < 5; $i++) {
             $dim_id = $aralco_product['Product']['DimensionId' . $i];
             if (isset($dim_id) && !empty($dim_id)) {
@@ -292,10 +312,14 @@ class Aralco_Processing_Helper {
                     'taxonomy' => wc_attribute_taxonomy_name('grid-' . $dim_id),
                     'hide_empty' => false,
                 ]);
-                if ($terms_temp instanceof WP_Error) return $terms_temp;
-                if (is_numeric($terms_temp)) return new WP_Error(ARALCO_SLUG . '_invalid_terms',
-                    'get_terms did not return a list of terms for taxonomy ' .
-                    wc_attribute_taxonomy_name('grid-' . $dim_id));
+                if ($terms_temp instanceof WP_Error || is_numeric($terms_temp)) {
+                    array_push($invalid_grids, 'dimension' . $dim_id);
+                    continue;
+                }
+
+                if(count($invalid_grids) > 0) continue;
+                if (count($terms_temp) <= 0) continue;
+
                 $terms = array();
                 foreach ($terms_temp as $term_temp){
                     array_push($terms, $term_temp->name);
@@ -312,6 +336,11 @@ class Aralco_Processing_Helper {
                     wp_set_object_terms($post_id, $terms, wc_attribute_taxonomy_name('grid-' . $dim_id));
                 }
             }
+        }
+        if(count($invalid_grids) > 0){
+            return new WP_Error(ARALCO_SLUG . '_dimension_not_enabled',
+                $aralco_product['Product']['Code'] .
+                ' - requires the following grids that are not enabled for ecommerce: ' . implode(', ', $invalid_grids));
         }
         if(count($product_attributes) > 0){
             update_post_meta($post_id, '_product_attributes', $product_attributes);
@@ -594,8 +623,6 @@ class Aralco_Processing_Helper {
             // We are going to nest all the grid values instead of having a flat list of name/value pairs
             if(!isset($grids[$grid['CategoryId']])){
                 $grids[$grid['CategoryId']] = array();
-                $grids[$grid['CategoryId']]['DepartmentId'] = $grid['DepartmentId'];
-                $grids[$grid['CategoryId']]['Type'] = $grid['Type'];
                 $grids[$grid['CategoryId']]['CategoryId'] = $grid['CategoryId'];
                 $grids[$grid['CategoryId']]['CategoryName'] = $grid['CategoryName'];
                 $grids[$grid['CategoryId']]['values'] = array();
