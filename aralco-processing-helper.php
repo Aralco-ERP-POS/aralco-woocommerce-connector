@@ -148,7 +148,7 @@ class Aralco_Processing_Helper {
                 if($result->get_error_code() == ARALCO_SLUG . '_dimension_not_enabled'){
                     $post = array('ID' => $post_id, 'post_status' => 'draft');
                     wp_update_post($post);
-                    $returnVal = $result;
+//                    $returnVal = $result; // TODO: Temporarily ignoring this as a problem
                 } else {
                     return $result;
                 }
