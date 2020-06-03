@@ -183,7 +183,15 @@ function aralco_validate_config($input) {
     // Make the inputted data tag safe
     foreach($input as $key => $value){
         if(isset($input[$key])){
-            $output[$key] = strip_tags(stripslashes($input[$key]));
+            if(is_array($input[$key])){
+                $array_out = array();
+                foreach ($input[$key] as $item){
+                    array_push($array_out, strip_tags(stripslashes($item)));
+                }
+                $output[$key] = $array_out;
+            } else {
+                $output[$key] = strip_tags(stripslashes($input[$key]));
+            }
         }
     }
 

@@ -40,19 +40,26 @@ function aralco_admin_settings_input($options, $args){
  */
 function aralco_admin_settings_select($options, $args){
     $errors = get_settings_errors($args['label_for']);
+    $multi = isset($args['multi']) && $args['multi'] === true;
     if(!empty($errors)) {
         foreach($errors as $index => $error){
             ?>
             <p style="color:#ff0000;"><?php print_r($error['message'])?></p>
         <?php }
     } ?>
-    <select id="<?php echo esc_attr($args['label_for']); ?>"
-           name="<?php echo ARALCO_SLUG ?>_options[<?php echo esc_attr($args['label_for']); ?>]"
-        <?php echo (isset($args['required'])) ? 'required="' . $args['required'] . '"' : '' ?>
+    <select id="<?php echo esc_attr($args['label_for']) ?>"
+           name="<?php echo ARALCO_SLUG ?>_options[<?php echo esc_attr($args['label_for']); ?>]<?php if ($multi) echo '[]' ?>"
+        <?php if (isset($args['multi'])) echo 'multiple size="5"' ?>
+        <?php if ($multi) echo 'required="' . $args['required'] . '"' ?>
     ><?php
         foreach($args['options'] as $label => $value){
-            $selected = (isset($options[$args['label_for']]) && $options[$args['label_for']] == $value) ?
-                ' selected="selected"' : '';
+            if($multi) {
+                $selected = (isset($options[$args['label_for']]) && in_array($value, $options[$args['label_for']])) ?
+                    ' selected="selected"' : '';
+            } else {
+                $selected = (isset($options[$args['label_for']]) && $options[$args['label_for']] == $value) ?
+                    ' selected="selected"' : '';
+            }
             ?><option value="<?php echo $value ?>"<?php echo $selected ?>><?php echo $label ?></option><?php
         }
         ?></select>

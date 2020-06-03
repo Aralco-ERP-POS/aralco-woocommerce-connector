@@ -22,7 +22,7 @@ class Aralco_Processing_Helper {
      * false if no update was due, and a WP_Error instance if something went wrong.
      */
     static function sync_products($everything = false) {
-        if ($everything) set_time_limit(3600); // Required for the amount of data that needs to be fetched
+        if ($everything) set_time_limit(0); // Required for the amount of data that needs to be fetched
         try{
             $start_time = new DateTime();
         } catch(Exception $e) {}
@@ -77,15 +77,12 @@ class Aralco_Processing_Helper {
                 update_option(ARALCO_SLUG . '_last_sync_duration_products', $time_taken);
             } catch(Exception $e) {}
 
+            update_option(ARALCO_SLUG . '_last_sync_product_count', $count);
+
             if(count($errors) > 0){
                 return $errors;
             }
-            update_option(ARALCO_SLUG . '_last_sync_product_count', $count);
 
-            $error = Aralco_Processing_Helper::sync_stock($lastSync);
-            if ($error instanceof WP_Error) return $error;
-
-            update_option(ARALCO_SLUG . '_last_sync', date("Y-m-d\TH:i:s"));
             return true;
         }
         return $result;
@@ -148,7 +145,7 @@ class Aralco_Processing_Helper {
                 if($result->get_error_code() == ARALCO_SLUG . '_dimension_not_enabled'){
                     $post = array('ID' => $post_id, 'post_status' => 'draft');
                     wp_update_post($post);
-//                    $returnVal = $result; // TODO: Temporarily ignoring this as a problem
+                    $returnVal = $result;
                 } else {
                     return $result;
                 }
@@ -485,27 +482,17 @@ class Aralco_Processing_Helper {
     }
 
     /**
-     * Create a product variation for a defined variable product ID.
-     * DO NOT USE DIRECTLY. USE Aralco_Processing_Helper::process_product_variations()
-     *
-     * @since 3.0.0
-     * @param int   $product_id | Post ID of the product parent variable product.
-     * @param array $variation_data | The data to insert in the product.
-     * @return WP_Error | true
-     */
-    static function create_product_variation( $product_id, $variation_data ){
-
-    }
-
-    /**
      * Syncs the product inventory
      *
-     * @param string $lastSync the date and time of the last sync. Default 1900-01-01T00:00:00
+     * @param bool $everything if to ignore
      * @return bool|WP_Error true if the inventory sync succeeded, otherwise an instance of WP_Error
      */
-    static function sync_stock($lastSync = '1900-01-01T00:00:00'){
-//        $lastSync = '1900-01-01T00:00:00'; //TODO: REMOVE WHEN DONE TESTING
-        if (substr($lastSync, 0, 1) == '1') set_time_limit(0);
+    static function sync_stock($everything = false){
+        if ($everything) set_time_limit(0);
+        $lastSync = get_option(ARALCO_SLUG . '_last_sync');
+        if(!isset($lastSync) || $lastSync === false || $everything){
+            $lastSync = date("Y-m-d\TH:i:s", mktime(0, 0, 0, 1, 1, 1900));
+        }
 
         try{
             $start_time = new DateTime();
@@ -762,6 +749,11 @@ class Aralco_Processing_Helper {
             update_option(ARALCO_SLUG . '_last_sync_duration_departments', $time_taken);
         } catch(Exception $e) {}
         update_option(ARALCO_SLUG . '_last_sync_department_count', $count);
+        return true;
+    }
+
+    static function sync_groupings() {
+        //TODO: Implementation
         return true;
     }
 

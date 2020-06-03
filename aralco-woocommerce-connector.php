@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.4.1
+ * Version: 1.5.0
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.1.1
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.4.1
+ * @version 1.5.0
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -184,6 +184,28 @@ class Aralco_WooCommerce_Connector {
                     'Hours' => '60',
                     'Days' => '1440'
                 ),
+                'required' => 'required'
+            ]
+        );
+
+        add_settings_field(
+            ARALCO_SLUG . '_field_sync_items',
+            __('Sync Items', ARALCO_SLUG),
+            array($this, 'field_select'),
+            ARALCO_SLUG,
+            ARALCO_SLUG . '_global_section',
+            [
+                'label_for' => ARALCO_SLUG . '_field_sync_items',
+                'class' => ARALCO_SLUG . '_row',
+                'description' => 'Please select all the items you want to sync automatically from Aralco. Items not selected can be synced manually.',
+                'options' => array(
+                    'Departments' => 'departments',
+                    'Groupings' => 'groupings',
+                    'Grids' => 'grids',
+                    'Products' => 'products',
+                    'Stock' => 'stock'
+                ),
+                'multi' => true,
                 'required' => 'required'
             ]
         );
@@ -425,46 +447,100 @@ class Aralco_WooCommerce_Connector {
      * updates since last sync. Default is false
      */
     public function sync_products($everything = false){
-        $result = Aralco_Processing_Helper::sync_departments();
-        if($result === true){ // No issue? continue.
-            $result = Aralco_Processing_Helper::sync_grids();
-            if($result === true){ // No issue? continue.
-                $result = Aralco_Processing_Helper::sync_products($everything);
+        $what_to_sync = array(
+            'departments' => isset($_POST['sync-departments']),
+            'groupings' => isset($_POST['sync-groupings']),
+            'grids' => isset($_POST['sync-grids']),
+            'products' => isset($_POST['sync-products']),
+            'stock' => isset($_POST['sync-stock'])
+        );
+
+        $errors = array();
+        if($what_to_sync['departments']) {
+            $result = Aralco_Processing_Helper::sync_departments();
+            if ($result !== true) {
+                array_push($errors, $result);
             }
+        } else {
+            update_option(ARALCO_SLUG . '_last_sync_department_count', 0);
+            update_option(ARALCO_SLUG . '_last_sync_duration_departments', 0);
         }
-        if (is_bool($result)) {
+        if($what_to_sync['groupings']) {
+            $result = Aralco_Processing_Helper::sync_groupings();
+            if($result !== true){
+                array_push($errors, $result);
+            }
+        } else {
+            update_option(ARALCO_SLUG . '_last_sync_grouping_count', 0);
+            update_option(ARALCO_SLUG . '_last_sync_duration_groupings', 0);
+        }
+        if($what_to_sync['grids']) {
+            $result = Aralco_Processing_Helper::sync_grids();
+            if($result !== true){
+                array_push($errors, $result);
+            }
+        } else {
+            update_option(ARALCO_SLUG . '_last_sync_grid_count', 0);
+            update_option(ARALCO_SLUG . '_last_sync_duration_grids', 0);
+        }
+        if($what_to_sync['products']) {
+            $result = Aralco_Processing_Helper::sync_products($everything);
+            if($result !== true){
+                array_push($errors, $result);
+            }
+        } else {
+            update_option(ARALCO_SLUG . '_last_sync_product_count', 0);
+            update_option(ARALCO_SLUG . '_last_sync_duration_products', 0);
+        }
+        if($what_to_sync['stock']) {
+            $result = Aralco_Processing_Helper::sync_stock($everything);
+            if($result !== true){
+                array_push($errors, $result);
+            }
+        } else {
+            update_option(ARALCO_SLUG . '_last_sync_stock_count', 0);
+            update_option(ARALCO_SLUG . '_last_sync_duration_stock', 0);
+        }
+
+        update_option(ARALCO_SLUG . '_last_sync', date("Y-m-d\TH:i:s"));
+
+        if (count($errors) <= 0) {
             add_settings_error(
                 ARALCO_SLUG . '_messages',
                 ARALCO_SLUG . '_message',
                 __('Sync successful.', ARALCO_SLUG),
                 'updated'
             );
-        } else if(is_array($result)) {
-            $message = '';
-            foreach($result as $key=>$value){
-                $message .= '<br>' . $value->get_error_message();
+            return;
+        }
+        foreach ($errors as $result) {
+            if (is_array($result)) {
+                $message = '';
+                foreach ($result as $key => $value) {
+                    $message .= '<br>' . $value->get_error_message();
+                }
+                add_settings_error(
+                    ARALCO_SLUG . '_messages',
+                    ARALCO_SLUG . '_messages',
+                    __('Sync completed with errors.') . $message,
+                    'warning'
+                );
+            } else if ($result instanceof WP_Error) {
+                add_settings_error(
+                    ARALCO_SLUG . '_messages',
+                    ARALCO_SLUG . '_messages',
+                    $result->get_error_message(),
+                    'error'
+                );
+            } else {
+                // Shouldn't ever get here.
+                add_settings_error(
+                    ARALCO_SLUG . '_messages',
+                    ARALCO_SLUG . '_messages',
+                    __('Something went wrong. Please contact Aralco.', ARALCO_SLUG) . ' (Code 2)' . $result,
+                    'error'
+                );
             }
-            add_settings_error(
-                ARALCO_SLUG . '_messages',
-                ARALCO_SLUG . '_messages',
-                __('Sync completed with errors.') . $message,
-                'warning'
-            );
-        } else if($result instanceof WP_Error) {
-            add_settings_error(
-                ARALCO_SLUG . '_messages',
-                ARALCO_SLUG . '_messages',
-                $result->get_error_message(),
-                'error'
-            );
-        } else {
-            // Shouldn't ever get here.
-            add_settings_error(
-                ARALCO_SLUG . '_messages',
-                ARALCO_SLUG . '_messages',
-                __('Something went wrong. Please contact Aralco.', ARALCO_SLUG) . ' (Code 2)' . $result,
-                'error'
-            );
         }
     }
 
@@ -473,12 +549,27 @@ class Aralco_WooCommerce_Connector {
      */
     public function sync_products_quite() {
         try{
-            $result = Aralco_Processing_Helper::sync_departments();
-            if($result === true){ // No issue? continue.
-                $result = Aralco_Processing_Helper::sync_grids();
-                if($result === true){ // No issue? continue.
-                    Aralco_Processing_Helper::sync_products(false);
-                }
+            $options = get_option(ARALCO_SLUG . '_options');
+            if(!isset($options[ARALCO_SLUG . '_field_sync_items'])){
+                $options = array();
+            } else {
+                $options = $options[ARALCO_SLUG . '_field_sync_items'];
+            }
+
+            if(in_array('departments', $options)) {
+                Aralco_Processing_Helper::sync_departments();
+            }
+            if(in_array('groupings', $options)) {
+                Aralco_Processing_Helper::sync_groupings();
+            }
+            if(in_array('grids', $options)) {
+                Aralco_Processing_Helper::sync_grids();
+            }
+            if(in_array('products', $options)) {
+                Aralco_Processing_Helper::sync_products();
+            }
+            if(in_array('stock', $options)) {
+                Aralco_Processing_Helper::sync_stock();
             }
         } catch (Exception $e) {
             // Do nothing
