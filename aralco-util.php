@@ -33,4 +33,25 @@ class Aralco_Util {
             }
         }
     }
+
+    /**
+     * Returns a id safe string.
+     * safe strings are trimmed, all lowercase, non-alphanumeric characters removed, one or more whitespace characters are replaced with a single dash.
+     *
+     * @param string $str
+     * @return string
+     */
+    static function sanitize_name($str) {
+        return preg_replace(
+            "/[^a-z0-9\-]/",
+            '',
+            preg_replace(
+                "/\s+/",
+                '-',
+                strtolower(
+                    trim($str)
+                )
+            )
+        );
+    }
 }

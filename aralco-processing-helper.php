@@ -1,6 +1,7 @@
 <?php
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
+require_once "aralco-util.php";
 
 /**
  * Class Aralco_Processing_Helper
@@ -224,8 +225,46 @@ class Aralco_Processing_Helper {
 
         $product->save();
 
+        Aralco_Processing_Helper::process_product_grouping($post_id, $item);
         Aralco_Processing_Helper::process_item_images($post_id, $item);
         return $returnVal;
+    }
+
+    static function process_product_grouping($post_id, $aralco_product) {
+        $product_attributes = get_post_meta($post_id, '_product_attributes');
+        $invalid_grouping = array();
+        foreach ($aralco_product['Product']['ProductGrouping'] as $i => $group) {
+            $group_id = Aralco_Util::sanitize_name($group['Group']);
+            $terms_temp = get_terms([
+                'taxonomy' => wc_attribute_taxonomy_name('grouping-' . $group_id),
+                'hide_empty' => false,
+            ]);
+            if ($terms_temp instanceof WP_Error || is_numeric($terms_temp)) {
+                array_push($invalid_grouping, 'grouping ' . $group_id);
+                continue;
+            }
+
+            if(count($invalid_grouping) > 0) continue;
+
+            $product_attributes[wc_attribute_taxonomy_name('grouping-' . $group_id)] = array(
+                'name' => wc_attribute_taxonomy_name('grouping-' . $group_id),
+                'value' => '',
+                'position' => $i,
+                'is_visible' => '1',
+                'is_variation' => '0',
+                'is_taxonomy' => '1'
+            );
+            wp_set_object_terms($post_id, array($group['Value']), wc_attribute_taxonomy_name('grouping-' . $group_id));
+        }
+        if(count($invalid_grouping) > 0){
+            return new WP_Error(ARALCO_SLUG . '_dimension_not_enabled',
+                $aralco_product['Product']['Code'] .
+                ' - requires the following groups that are not enabled for ecommerce: ' . implode(', ', $invalid_grouping));
+        }
+        if(count($product_attributes) > 0){
+            update_post_meta($post_id, '_product_attributes', $product_attributes);
+        }
+        return true;
     }
 
     static function process_item_images($post_id, $item){
@@ -622,7 +661,6 @@ class Aralco_Processing_Helper {
         unset($raw_grids);
 
         // Start data entry
-        global $wpdb;
         $i1 = 0;
         foreach($grids as $key => $grid){
             // Part 1: The top level grid groupings
@@ -753,7 +791,88 @@ class Aralco_Processing_Helper {
     }
 
     static function sync_groupings() {
-        //TODO: Implementation
+        try{
+            $start_time = new DateTime();
+        } catch(Exception $e) {}
+
+        $groupings_raw = Aralco_Connection_Helper::getGroupings();
+        $groupings = array();
+        foreach ($groupings_raw as $item) {
+            if (!empty($item['GroupingListID'])){
+                if(!isset($groupings[$item['Group']])){
+                    $groupings[$item['Group']] = array(
+                        'group' => $item['Group'],
+                        'groupDescription' => $item['GroupDescription'],
+                        'values' => array(
+                            $item['Value'] => (isset($item['ValueDescription'])) ? $item['ValueDescription'] : ''
+                        ),
+                    );
+                } else {
+                    $groupings[$item['Group']]['values'][$item['Value']] = (isset($item['ValueDescription'])) ? $item['ValueDescription'] : '';
+                }
+            }
+        }
+
+        $groupings = array_values($groupings);
+//        return $groupings;
+
+        $count = 0;
+        foreach($groupings as $index => $grouping){
+            $name = 'grouping-' . Aralco_Util::sanitize_name($grouping['group']);
+            $does_exist = taxonomy_exists(wc_attribute_taxonomy_name($name));
+            if($does_exist) {
+                $id = wc_attribute_taxonomy_id_by_name($name);
+                wc_update_attribute($id, array(
+                    'name' => $grouping['group'],
+                    'slug' => $name
+                ));
+            } else {
+                $id = wc_create_attribute(array(
+                    'name' => $grouping['group'],
+                    'slug' => $name,
+                    'type' => 'select',
+                    'order_by' => 'menu_order',
+                    'has_archives' => false
+                ));
+            }
+            if ($id instanceof WP_Error) continue;
+
+            $i2 = 0;
+            foreach($grouping['values'] as $key => $value) {
+                $taxonomy = wc_attribute_taxonomy_name($name);
+                $slug = sprintf('%s-val-%s', $taxonomy, Aralco_Util::sanitize_name($key));
+                $existing = get_term_by('slug', $slug, $taxonomy);
+                if ($existing == false){
+                    $result = wp_insert_term($key, $taxonomy, array(
+                        'slug' => $slug,
+                        'description' => $value
+                    ));
+                    if($result instanceof WP_Error){
+//                        return $result;
+                        // Ignore and continue for now. //TODO
+                        continue;
+                    }
+                    $id = $result['term_id'];
+                } else {
+                    $id = $existing->term_id;
+                    wp_update_term($id, $taxonomy, array(
+                        'name' => $key,
+                        'description' => $value,
+                    ));
+                }
+                delete_term_meta($id, 'order');
+                add_term_meta($id, 'order', $i2++);
+                delete_term_meta($id, 'order_' . $taxonomy);
+                add_term_meta($id, 'order_' . $taxonomy, $count);
+            }
+            $count++;
+        }
+
+        try{
+            $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
+            update_option(ARALCO_SLUG . '_last_sync_duration_groupings', $time_taken);
+        } catch(Exception $e) {}
+        update_option(ARALCO_SLUG . '_last_sync_grouping_count', $count);
         return true;
     }
 

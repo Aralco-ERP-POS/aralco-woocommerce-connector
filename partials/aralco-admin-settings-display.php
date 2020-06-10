@@ -183,8 +183,19 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
                 <span class="dashicons dashicons-grid-view" aria-hidden="true"></span>
                 <span class="screen-reader-text">Grids:</span>
                 <?php
-                    $time_taken = get_option(ARALCO_SLUG . '_last_sync_duration_grids');
-                    $count = get_option(ARALCO_SLUG . '_last_sync_grid_count');
+                $time_taken = get_option(ARALCO_SLUG . '_last_sync_duration_grids');
+                $count = get_option(ARALCO_SLUG . '_last_sync_grid_count');
+                if ($time_taken > 0) $total_run_tiume += $time_taken;
+                if ($count > 0) $total_records += $count;
+                echo ($count !== false ? $count : '0') . ' (' .
+                    ($time_taken !== false ? $time_taken : '0') . 's)'
+                ?>
+            </span> <span title="Groupings">
+                <span class="dashicons dashicons-index-card" aria-hidden="true"></span>
+                <span class="screen-reader-text">Groupings:</span>
+                <?php
+                    $time_taken = get_option(ARALCO_SLUG . '_last_sync_duration_groupings');
+                    $count = get_option(ARALCO_SLUG . '_last_sync_grouping_count');
                     if ($time_taken > 0) $total_run_tiume += $time_taken;
                     if ($count > 0) $total_records += $count;
                     echo ($count !== false ? $count : '0') . ' (' .
