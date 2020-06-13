@@ -189,7 +189,7 @@ class Aralco_Processing_Helper {
             );
             $product->set_price(isset($item['Product']['DiscountPrice'])? $item['Product']['DiscountPrice'] : $item['Product']['Price']);
         }
-        $product->set_featured(($item['Product']['Featured'] === true) ? 'yes' : 'no');
+        $product->set_featured(($item['Product']['Featured'] == true));
         if(isset($item['Product']['WebProperties']['Weight'])){
             $product->set_weight($item['Product']['WebProperties']['Weight']);
         }
@@ -225,14 +225,41 @@ class Aralco_Processing_Helper {
 
         $product->save();
 
+        // Set Advanced Product Attributes
+        try {
+            $product_attributes = get_post_meta($post_id, '_product_attributes', true);
+            if(!is_array($product_attributes)) $product_attributes = array();
+            $product_attributes[wc_attribute_taxonomy_name('aralco-flags')] = array(
+                'name' => wc_attribute_taxonomy_name('aralco-flags'),
+                'value' => '',
+                'position' => 0,
+                'is_visible' => '0',
+                'is_variation' => '0',
+                'is_taxonomy' => '1'
+            );
+
+            $terms = array();
+            if (isset($item['Product']['New']) && $item['Product']['New'])
+                array_push($terms, 'New');
+            if (isset($item['Product']['WebClearance']) && $item['Product']['WebClearance'])
+                array_push($terms, 'Clearance');
+            if (isset($item['Product']['WebSpecial']) && $item['Product']['WebSpecial'])
+                array_push($terms, 'Special');
+
+            wp_set_object_terms($post_id, $terms, wc_attribute_taxonomy_name('aralco-flags'));
+            update_post_meta($post_id, '_product_attributes', $product_attributes);
+
+        } catch (Exception $exception) {} //Ignored
+
         Aralco_Processing_Helper::process_product_grouping($post_id, $item);
         Aralco_Processing_Helper::process_item_images($post_id, $item);
         return $returnVal;
     }
 
     static function process_product_grouping($post_id, $aralco_product) {
-        $product_attributes = get_post_meta($post_id, '_product_attributes');
+        $product_attributes = get_post_meta($post_id, '_product_attributes', true);
         $invalid_grouping = array();
+        if (!isset($aralco_product['Product']['ProductGrouping'])) return true; // Nothing to do.
         foreach ($aralco_product['Product']['ProductGrouping'] as $i => $group) {
             $group_id = Aralco_Util::sanitize_name($group['Group']);
             $terms_temp = get_terms([

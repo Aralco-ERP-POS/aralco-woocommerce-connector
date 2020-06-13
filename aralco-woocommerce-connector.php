@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.5.1
+ * Version: 1.5.2
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.1.1
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.5.1
+ * @version 1.5.2
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -62,6 +62,8 @@ class Aralco_WooCommerce_Connector {
 
             // register login hook
             add_action('wp_login', array($this, 'customer_login'));
+
+            add_action('admin_init', array($this, 'register_product_taxonomy'));
         } else {
             // Show admin notice that WooCommerce needs to be active.
             add_action('admin_notices', array($this, 'plugin_not_available'));
@@ -664,6 +666,44 @@ class Aralco_WooCommerce_Connector {
      */
     public function submit_order_to_aralco($order_id) {
         Aralco_Processing_Helper::process_order($order_id);
+    }
+
+    /**
+     * Registers the built in product taxonomy for tracking if a product is new, on special, or on clearance
+     */
+    public function register_product_taxonomy() {
+        $taxonomy = wc_attribute_taxonomy_name('aralco-flags');
+
+        // Create the Taxonomy
+        if(!taxonomy_exists($taxonomy)){
+            $id = wc_create_attribute(array(
+                'name' => 'Aralco Flags',
+                'slug' => $taxonomy,
+                'type' => 'select',
+                'order_by' => 'menu_order',
+                'has_archives' => true
+            ));
+            if ($id instanceof WP_Error) return;
+        }
+
+        // Will be true only immediately after the taxonomy was created. Will be false on next page load.
+        if(!taxonomy_exists($taxonomy)) return;
+
+        $terms = array('New', 'Special', 'Clearance');
+        foreach($terms as $index => $value) {
+            $slug = sprintf('%s-val-%s', $taxonomy, Aralco_Util::sanitize_name($value));
+            $existing = get_term_by('slug', $slug, $taxonomy);
+            if ($existing == false){
+                $result = wp_insert_term($value, $taxonomy, array('slug' => $slug));
+                if($result instanceof WP_Error) continue;
+
+                $id = $result['term_id'];
+                delete_term_meta($id, 'order');
+                delete_term_meta($id, 'order_' . $taxonomy);
+                add_term_meta($id, 'order', $index);
+                add_term_meta($id, 'order_' . $taxonomy, $index);
+            }
+        }
     }
 }
 
