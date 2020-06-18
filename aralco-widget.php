@@ -36,14 +36,13 @@ class List_Groupings_For_Department_Widget extends WP_Widget{
                         array_push($filters, 'grouping-' . Aralco_Util::sanitize_name($temp_filter));
                     }
                 }
-
-                $title = (isset($instance['title']) && !empty($instance['title']))? $instance['title'] :
-                    __('Product Filters', ARALCO_SLUG);
-                echo $args['before_widget'] . $args['before_title'] . apply_filters('widget_title', $title) .
-                    $args['after_title'] . '<div class="list-groupings-for-department-widget">';
                 if(count($filters) > 0){
+                    $title = (isset($instance['title']) && !empty($instance['title']))? $instance['title'] :
+                        __('Product Filters', ARALCO_SLUG);
                     global $wp;
-                    echo '<form class="woocommerce-widget-layered-nav-dropdown" method="get" action="' .
+                    echo $args['before_widget'] . $args['before_title'] . apply_filters('widget_title', $title) .
+                        $args['after_title'] . '<div class="list-groupings-for-department-widget">' .
+                        '<form class="woocommerce-widget-layered-nav-dropdown" method="get" action="' .
                         home_url(add_query_arg(array(), $wp->request)) . '">';
                     if(isset($_GET['min_price']) && is_numeric($_GET['min_price'])){
                         echo '<input type="hidden" name="min_price" value="' . intval($_GET['min_price']) . '">';
@@ -51,47 +50,44 @@ class List_Groupings_For_Department_Widget extends WP_Widget{
                     if(isset($_GET['max_price']) && is_numeric($_GET['max_price'])){
                         echo '<input type="hidden" name="max_price" value="' . intval($_GET['max_price']) . '">';
                     }
-                }
-                foreach($filters as $filter){
-                    /**
-                     * @var $the_taxonomy WP_Taxonomy
-                     */
-                    $the_taxonomy = get_taxonomy(wc_attribute_taxonomy_name($filter));
-                    $the_terms = get_terms(array(
-                        'taxonomy' => wc_attribute_taxonomy_name($filter)
-                        /*, 'hide_empty' => false*/
-                    ));
-                    $options = array();
-                    if ($the_taxonomy instanceof WP_Taxonomy && !($the_terms instanceof WP_Error) &&
-                        $the_taxonomy->public && $the_taxonomy->publicly_queryable) {
-                        $options[''] = __('Select an option...', ARALCO_SLUG);
-                        foreach($the_terms as $the_term) {
-                            $options[$the_term->slug] = $the_term->name;
-                        }
-                    }
-                    if($options > 1) {
-                        $value = '';
-                        if (isset($_GET['filter_' . $filter])){
-                            foreach($options as $slug => $name) {
-                                if($_GET['filter_' . $filter] === $slug){
-                                    $value = $slug;
-                                    break;
-                                }
+                    foreach($filters as $filter){
+                        /**
+                         * @var $the_taxonomy WP_Taxonomy
+                         */
+                        $the_taxonomy = get_taxonomy(wc_attribute_taxonomy_name($filter));
+                        $the_terms = get_terms(array(
+                            'taxonomy' => wc_attribute_taxonomy_name($filter)
+                            /*, 'hide_empty' => false*/
+                        ));
+                        $options = array();
+                        if ($the_taxonomy instanceof WP_Taxonomy && !($the_terms instanceof WP_Error) &&
+                            $the_taxonomy->public && $the_taxonomy->publicly_queryable) {
+                            $options[''] = __('Select an option...', ARALCO_SLUG);
+                            foreach($the_terms as $the_term) {
+                                $options[$the_term->slug] = $the_term->name;
                             }
                         }
+                        if($options > 1) {
+                            $value = '';
+                            if (isset($_GET['filter_' . $filter])){
+                                foreach($options as $slug => $name) {
+                                    if($_GET['filter_' . $filter] === $slug){
+                                        $value = $slug;
+                                        break;
+                                    }
+                                }
+                            }
 
-                        aralco_form_field('filter_' . $filter, array(
-                            'type' => 'select',
-                            'class' => array('wps-drop'),
-                            'label' => $the_taxonomy->label,
-                            'options' => $options
-                        ), $value);
+                            aralco_form_field('filter_' . $filter, array(
+                                'type' => 'select',
+                                'class' => array('wps-drop'),
+                                'label' => $the_taxonomy->label,
+                                'options' => $options
+                            ), $value);
+                        }
                     }
+                    echo '<button class="button" type="submit">Filter</button></form></div>' . $args['after_widget'];
                 }
-                if(count($filters) > 0){
-                    echo '<button class="button" type="submit">Filter</button></form>';
-                }
-                echo '</div>' . $args['after_widget'];
             }
         } else {
             $title = (isset($instance['title']) && !empty($instance['title']))? $instance['title'] :
