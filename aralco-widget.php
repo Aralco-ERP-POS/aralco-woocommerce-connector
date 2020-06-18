@@ -60,30 +60,29 @@ class List_Groupings_For_Department_Widget extends WP_Widget{
                             /*, 'hide_empty' => false*/
                         ));
                         $options = array();
-                        if ($the_taxonomy instanceof WP_Taxonomy && !($the_terms instanceof WP_Error) &&
-                            $the_taxonomy->public && $the_taxonomy->publicly_queryable) {
+                        if ($the_taxonomy instanceof WP_Taxonomy && !($the_terms instanceof WP_Error)) {
                             $options[''] = __('Select an option...', ARALCO_SLUG);
                             foreach($the_terms as $the_term) {
                                 $options[$the_term->slug] = $the_term->name;
                             }
-                        }
-                        if($options > 1) {
-                            $value = '';
-                            if (isset($_GET['filter_' . $filter])){
-                                foreach($options as $slug => $name) {
-                                    if($_GET['filter_' . $filter] === $slug){
-                                        $value = $slug;
-                                        break;
+                            if($options > 1) {
+                                $value = '';
+                                if (isset($_GET['filter_' . $filter])){
+                                    foreach($options as $slug => $name) {
+                                        if($_GET['filter_' . $filter] === $slug){
+                                            $value = $slug;
+                                            break;
+                                        }
                                     }
                                 }
-                            }
 
-                            aralco_form_field('filter_' . $filter, array(
-                                'type' => 'select',
-                                'class' => array('wps-drop'),
-                                'label' => $the_taxonomy->label,
-                                'options' => $options
-                            ), $value);
+                                aralco_form_field('filter_' . $filter, array(
+                                    'type' => 'select',
+                                    'class' => array('wps-drop'),
+                                    'label' => $the_taxonomy->label,
+                                    'options' => $options
+                                ), $value);
+                            }
                         }
                     }
                     echo '<button class="button" type="submit">Filter</button></form></div>' . $args['after_widget'];
