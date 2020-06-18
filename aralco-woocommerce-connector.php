@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.5.2
+ * Version: 1.6.0
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.1.1
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.5.2
+ * @version 1.6.0
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -689,7 +689,7 @@ class Aralco_WooCommerce_Connector {
         // Will be true only immediately after the taxonomy was created. Will be false on next page load.
         if(!taxonomy_exists($taxonomy)) return;
 
-        $terms = array('New', 'Special', 'Clearance');
+        $terms = array('New', 'Special', 'Clearance', 'Catalogue Only');
         foreach($terms as $index => $value) {
             $slug = sprintf('%s-val-%s', $taxonomy, Aralco_Util::sanitize_name($value));
             $existing = get_term_by('slug', $slug, $taxonomy);
@@ -707,7 +707,6 @@ class Aralco_WooCommerce_Connector {
     }
 }
 
+require_once 'aralco-widget.php';
+
 new Aralco_WooCommerce_Connector();
-
-
-

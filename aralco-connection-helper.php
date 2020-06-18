@@ -353,8 +353,8 @@ class Aralco_Connection_Helper {
         }
 
         return new WP_Error(
-            ARALCO_SLUG . '_get_department_error',
-            __('Department Grids Fetch Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG)
+            ARALCO_SLUG . '_get_grids_error',
+            __('Grids Fetch Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG)
         );
     }
 

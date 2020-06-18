@@ -24,6 +24,7 @@ class Aralco_Processing_Helper {
      */
     static function sync_products($everything = false) {
         if ($everything) set_time_limit(0); // Required for the amount of data that needs to be fetched
+        else set_time_limit(3600);
         try{
             $start_time = new DateTime();
         } catch(Exception $e) {}
@@ -245,6 +246,8 @@ class Aralco_Processing_Helper {
                 array_push($terms, 'Clearance');
             if (isset($item['Product']['WebSpecial']) && $item['Product']['WebSpecial'])
                 array_push($terms, 'Special');
+            if (isset($item['Product']['CatalogueOnly']) && $item['Product']['CatalogueOnly'])
+                array_push($terms, 'Catalogue Only');
 
             wp_set_object_terms($post_id, $terms, wc_attribute_taxonomy_name('aralco-flags'));
             update_post_meta($post_id, '_product_attributes', $product_attributes);
@@ -756,6 +759,7 @@ class Aralco_Processing_Helper {
      * @return true|WP_Error
      */
     static function sync_departments(){
+        set_time_limit(3600);
         try{
             $start_time = new DateTime();
         } catch(Exception $e) {}
@@ -767,8 +771,10 @@ class Aralco_Processing_Helper {
         foreach($departments as $department){
             $count++;
             $slug = 'department-' . $department['Id'];
+            // See if term exists
             $term = get_term_by( 'slug', $slug, 'product_cat' );
             if($term === false){
+                // Doesn't exist so lets create it
                 $result = wp_insert_term(
                     $department['Name'],
                     'product_cat',
@@ -779,6 +785,7 @@ class Aralco_Processing_Helper {
                 if ($result instanceof WP_Error) return $result;
                 $term_id = $result['term_id'];
             } else {
+                // exists so lets update it
                 $result = wp_update_term($term->term_id, 'product_cat', array(
                     'description' => isset($department['Description']) ? $department['Description'] : '',
                     'slug' => $slug
@@ -786,6 +793,21 @@ class Aralco_Processing_Helper {
                 if ($result instanceof WP_Error) return $result;
                 $term_id = $term->term_id;
             }
+
+            //update group meta with grouping info
+            $groups = array();
+            if(is_array($department['Filters'])){
+                foreach ($department['Filters'] as $grouping) {
+                    array_push($groups, $grouping['Name']);
+                }
+            }
+            if(count($groups) > 0){
+                update_term_meta($term_id, 'aralco_filters', $groups);
+            } else {
+                $exists = get_term_meta($term_id, 'aralco_filters', true);
+                if($exists != false) delete_term_meta($term_id, 'aralco_filters');
+            }
+
             Aralco_Processing_Helper::process_department_images($term_id, $department['Id']);
         }
 
