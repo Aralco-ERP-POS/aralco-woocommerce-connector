@@ -1012,10 +1012,11 @@ class Aralco_Processing_Helper {
      * Processes and submits the order to Aralco
      *
      * @param int $order_id the id of the order to submit to Aralco
-     * @return bool|WP_Error true if the order was submitted with no issue, false if orders are turned off, and WP_Error
-     * instance if something went wrong
+     * @param $just_return bool if true, the order will be returned instead of submitted
+     * @return bool|array|WP_Error true if the order was submitted with no issue, false if orders are turned off, the
+     * order array if $just_return is true and WP_Error instance if something went wrong
      */
-    static function process_order($order_id) {
+    static function process_order($order_id, $just_return = false) {
         $options = get_option(ARALCO_SLUG . '_options');
 
         if(!isset($options[ARALCO_SLUG . '_field_order_enabled']) || $options[ARALCO_SLUG . '_field_order_enabled'] != true) {
@@ -1090,6 +1091,11 @@ class Aralco_Processing_Helper {
             )
         );
 
+        $customer_note = $order->get_customer_note();
+        if(isset($customer_note) && !empty($customer_note)){
+            $aralco_order['Remarks'] = $customer_note;
+        }
+
         $subTotal = 0.0;
         /**
          * @var $item WC_Order_Item_Product
@@ -1122,6 +1128,8 @@ class Aralco_Processing_Helper {
             ));
             $subTotal += $price;
         }
+
+        if (isset($just_return) && $just_return) return $aralco_order;
 
         $result = Aralco_Connection_Helper::createOrder($aralco_order);
         if (!$result instanceof WP_Error) {

@@ -112,6 +112,8 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
             submit_button('Save Settings');
             echo '<pre style="border: 1px solid #000; padding: 1em">' .
                  print_r(get_option(ARALCO_SLUG . '_options'), true) . '</pre>';
+            echo '<pre style="border: 1px solid #000; padding: 1em">' .
+                json_encode(Aralco_Processing_Helper::process_order(72955, true), JSON_PRETTY_PRINT) . '</pre>';
             ?>
         </form>
     </div>
