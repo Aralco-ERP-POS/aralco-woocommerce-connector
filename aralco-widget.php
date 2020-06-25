@@ -112,28 +112,34 @@ class List_Groupings_For_Department_Widget extends WP_Widget{
                         $options[$the_term->slug] = $the_term->name;
                     }
                     if($options > 1) {
-                        $value = '';
-                        if (isset($_GET[$filter_name])){
+                        $value = array();
+                        if (isset($_GET[$filter_name]) && $filter != 'product_cat'){
                             foreach($options as $slug => $name) {
-                                if($_GET[$filter_name] === $slug){
-                                    $value = $slug;
-                                    break;
+                                $get_array = explode(',', $_GET[$filter_name]);
+                                if(in_array($slug, $get_array)){
+                                    array_push($value, $slug);
                                 }
                             }
                         } else if(isset($cat) && $cat instanceof WP_Term && $filter == 'product_cat') {
                             $value = $cat->slug;
+                        } else if($filter == 'product_cat') {
+                            $value = '';
                         }
 
                         $classes = array('wps-drop', 'js-use-select2');
+                        $multiple = false;
                         if($filter != 'product_cat'){
                             array_push($classes, 'attr_filter');
+                            $multiple = true;
+                            echo '<input type="hidden" name="query_type' . substr($filter_name, 6) . '" value="or">';
                         }
 
                         aralco_form_field($filter_name, array(
                             'type' => 'select',
                             'class' => $classes,
                             'label' => $the_taxonomy->label,
-                            'options' => $options
+                            'options' => $options,
+                            'multiple' => $multiple,
                         ), $value);
                     }
                 }
@@ -165,7 +171,7 @@ $(document).on("change.select2", "#product_cat", function() {
             if(data.hasOwnProperty(fieldId)){
                 fields += "<p id=\'" + fieldId + "_field\' class=\'form-row wps-drop js-use-select2 attr_filter\' data-priority=\'\'>" +
                 "<label for=\'" + fieldId + "\' class=\'\'>" + data[fieldId].label + "</label><span class=\'woocommerce-input-wrapper\'>" +
-                "<select name=\'" + fieldId + "\' id=\'" + fieldId + "\' class=\'select \' data-allow_clear=\'true\' data-placeholder=\'Any\'>";
+                "<select name=\'" + fieldId + "\' id=\'" + fieldId + "\' class=\'select \' data-allow_clear=\'true\' data-placeholder=\'Any\' multiple>";
                 for (let optionId in data[fieldId].options){
                     if(data[fieldId].options.hasOwnProperty(optionId)){
                         fields += "<option value=\'" + optionId + "\'>" + data[fieldId].options[optionId] + "</option>";
@@ -187,13 +193,25 @@ $(document).on("change.select2", "#product_cat", function() {
     }
     })
 });
-$("#product-filter-form").on("submit", function() { //Prevents blanks fields from being submitted
+$("#product-filter-form").on("submit", function() {
+    // This section converts the multi selects to a comma delimited input
+    $(this).find(".attr_filter select[name]").each(function() {
+        if(Array.isArray($(this).val()) && $(this).val().length > 0){
+            $("<input>").attr("type", "hidden")
+            .attr("name", $(this).attr("name"))
+            .attr("value", $(this).val().join(","))
+            .appendTo("#product-filter-form");
+            $(this).prop("name", "");
+        }
+    });
+    
+    // This section prevents blanks fields from being submitted
     $(this).find("input[name], select[name]")
     .filter(function() {
         return !this.value;
     })
     .prop("name", "");
-})
+});
 if (($(document.body).hasClass("search") || $(document.body).hasClass("archive")) && $(window).width() < 768) {
     window.scroll({top: $("#primary").offset().top - 50});
 }');
