@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.7.1
+ * Version: 1.8.0
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.1.1
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.7.1
+ * @version 1.8.0
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -22,6 +22,9 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
 define('ARALCO_SLUG', 'aralco_woocommerce_connector');
 
 //add_filter( 'jetpack_development_mode', '__return_true' ); //TODO: Remove when done
+
+$current_aralco_user = array();
+$aralco_groups = array();
 
 require_once "aralco-util.php";
 require_once "aralco-admin-settings-input-validation.php";
@@ -43,19 +46,21 @@ class Aralco_WooCommerce_Connector {
         add_filter('cron_schedules', array($this, 'custom_cron_timespan'));
         register_deactivation_hook(__FILE__, array($this, 'unschedule_sync'));
 
+        add_action('init', array($this, 'register_globals'));
+
         // Check if WooCommerce is active
         if (in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get_option('active_plugins')))) {
             // trigger add product sync to cron (will only do if enabled)
             $this->schedule_sync();
 
             // register our settings_init to the admin_init action hook
-            add_action( 'admin_init', array($this, 'settings_init'));
+            add_action('admin_init', array($this, 'settings_init'));
 
             // register our options_page to the admin_menu action hook
-            add_action( 'admin_menu', array($this, 'options_page'));
+            add_action('admin_menu', array($this, 'options_page'));
 
             // register order complete hook
-            add_action( 'woocommerce_payment_complete', array($this, 'submit_order_to_aralco'), 10, 1 );
+            add_action('woocommerce_payment_complete', array($this, 'submit_order_to_aralco'), 10, 1);
 
             // register new user hook
             add_action('user_register', array($this, 'new_customer'));
@@ -63,7 +68,13 @@ class Aralco_WooCommerce_Connector {
             // register login hook
             add_action('wp_login', array($this, 'customer_login'));
 
+            // register custom product taxonomy
             add_action('admin_init', array($this, 'register_product_taxonomy'));
+
+            // register customer group price hooks
+
+            add_filter('woocommerce_get_price_html', array($this, 'alter_price_display'), 100, 2);
+            add_action('woocommerce_before_calculate_totals', array($this, 'alter_price_cart'), 100);
         } else {
             // Show admin notice that WooCommerce needs to be active.
             add_action('admin_notices', array($this, 'plugin_not_available'));
@@ -90,6 +101,20 @@ class Aralco_WooCommerce_Connector {
                 ARALCO_SLUG
             ))
         );
+    }
+
+    /**
+     * Registers globals for use elsewhere
+     */
+    public function register_globals() {
+        if(is_user_logged_in()) {
+            global $current_aralco_user;
+            $current_aralco_user = get_user_meta(wp_get_current_user()->ID, 'aralco_data', true);
+            if(!is_array($current_aralco_user)) $current_aralco_user = array();
+        }
+        global $aralco_groups;
+        $aralco_groups = get_option(ARALCO_SLUG . '_customer_groups', true);
+        if(!is_array($aralco_groups)) $aralco_groups = array();
     }
 
     /**
@@ -205,7 +230,8 @@ class Aralco_WooCommerce_Connector {
                     'Groupings' => 'groupings',
                     'Grids' => 'grids',
                     'Products' => 'products',
-                    'Stock' => 'stock'
+                    'Stock' => 'stock',
+                    'Customer Groups' => 'customer_groups'
                 ),
                 'multi' => true,
                 'required' => 'required'
@@ -454,7 +480,8 @@ class Aralco_WooCommerce_Connector {
             'groupings' => isset($_POST['sync-groupings']),
             'grids' => isset($_POST['sync-grids']),
             'products' => isset($_POST['sync-products']),
-            'stock' => isset($_POST['sync-stock'])
+            'stock' => isset($_POST['sync-stock']),
+            'customer_groups' => isset($_POST['sync-customer-groups'])
         );
 
         $errors = array();
@@ -503,7 +530,15 @@ class Aralco_WooCommerce_Connector {
             update_option(ARALCO_SLUG . '_last_sync_stock_count', 0);
             update_option(ARALCO_SLUG . '_last_sync_duration_stock', 0);
         }
-
+        if($what_to_sync['customer_groups']) {
+            $result = Aralco_Processing_Helper::sync_customer_groups();
+            if($result !== true){
+                array_push($errors, $result);
+            }
+        } else {
+            update_option(ARALCO_SLUG . '_last_sync_customer_groups_count', 0);
+            update_option(ARALCO_SLUG . '_last_sync_duration_customer_groups', 0);
+        }
         update_option(ARALCO_SLUG . '_last_sync', date("Y-m-d\TH:i:s"));
 
         if (count($errors) <= 0) {
@@ -572,6 +607,9 @@ class Aralco_WooCommerce_Connector {
             }
             if(in_array('stock', $options)) {
                 Aralco_Processing_Helper::sync_stock();
+            }
+            if(in_array('customer_groups', $options)) {
+                Aralco_Processing_Helper::sync_customer_groups();
             }
         } catch (Exception $e) {
             // Do nothing
@@ -658,6 +696,85 @@ class Aralco_WooCommerce_Connector {
 
         update_user_meta($user->ID, 'aralco_data', $data);
     }
+
+    /**
+     * @param string $price_html
+     * @param WC_Product $product
+     * @return string
+     */
+    public function alter_price_display($price_html, $product) {
+        // only modify the price on the front end. Leave the admin panel alone
+        if (is_admin()) return $price_html;
+
+        // if there is no price, there's nothing to do.
+        if ($product->get_price() === '') return $price_html;
+
+        // if logged in,
+        if (is_user_logged_in()) {
+            $orig_price = wc_get_price_to_display($product);
+            $new_price = $this::get_customer_group_price($orig_price);
+
+            // check if a discount was applied. if not, nothing to do.
+            if(abs($new_price - $orig_price) < 0.00001) return $price_html;
+
+            // Update the show price
+            $price_html = wc_price($new_price);
+        }
+
+        return $price_html;
+
+    }
+    /**
+     * Changes the display price based on customer group discount
+     *
+     * @param WC_Cart $cart
+     */
+    public function alter_price_cart($cart) {
+        // Don't do this for ajax calls or the admin interface
+        if (is_admin() && !defined('DOING_AJAX')) return;
+
+        // Required so we do it at the right time and not more than once
+        if (did_action('woocommerce_before_calculate_totals') >= 2) return;
+
+        // Needs to be logged in
+        if (!is_user_logged_in()) return;
+
+        // Apply the discount to each item
+        /** @var WC_Product[] $cart_item */
+        foreach ($cart->get_cart() as $cart_item_key => $cart_item) {
+            $product = $cart_item['data'];
+            $price = $product->get_price();
+
+            // No discount applied, so nothing to do.
+            $new_price = $this::get_customer_group_price($price);
+            if(abs($new_price - $price) < 0.00001) continue;
+
+            // Modify the price
+            $cart_item['data']->set_price($new_price);
+        }
+    }
+
+    /**
+     * Takes the normal price and returns the discounted price.
+     *
+     * @param float $normal_price
+     * @return float
+     */
+    private function get_customer_group_price($normal_price) {
+        global $current_aralco_user;
+        global $aralco_groups;
+        if (isset($current_aralco_user['customerGroupID']) && count($aralco_groups) > 0){
+            $new = array_values(array_filter($aralco_groups, function($item) use ($current_aralco_user) {
+                return $item['customerGroupID'] === $current_aralco_user['customerGroupID'];
+            }));
+            if (count($new) > 0 && is_numeric($new[0]['discountPercent']) && $new[0]['discountPercent'] > 0){
+                return round($normal_price * (1.0 - (floatval($new[0]['discountPercent']) / 100)), 2);
+            }
+        }
+
+        return $normal_price;
+    }
+
 
     /**
      * Catches completed orders and pushes them back to Aralco

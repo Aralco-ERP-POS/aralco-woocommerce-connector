@@ -110,10 +110,9 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
             settings_fields(ARALCO_SLUG);
             do_settings_sections(ARALCO_SLUG);
             submit_button('Save Settings');
+            echo '<h2>Debug</h2>';
             echo '<pre style="border: 1px solid #000; padding: 1em">' .
-                 print_r(get_option(ARALCO_SLUG . '_options'), true) . '</pre>';
-            echo '<pre style="border: 1px solid #000; padding: 1em">' .
-                json_encode(Aralco_Processing_Helper::process_order(72955, true), JSON_PRETTY_PRINT) . '</pre>';
+                print_r(get_option(ARALCO_SLUG . '_options'), true) . '</pre>';
             ?>
         </form>
     </div>
@@ -143,6 +142,7 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
         <label><input type="checkbox" name="sync-grids">Grids</label>
         <label><input type="checkbox" name="sync-products" checked="checked">Products</label>
         <label><input type="checkbox" name="sync-stock" checked="checked">Stock</label>
+        <label><input type="checkbox" name="sync-customer-groups" checked="checked">Customer Groups</label>
         <?php submit_button('Sync Now'); ?>
     </form>
     <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post">
@@ -154,6 +154,7 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
         <label><input type="checkbox" name="sync-grids">Grids</label>
         <label><input type="checkbox" name="sync-products" checked="checked">Products</label>
         <label><input type="checkbox" name="sync-stock" checked="checked">Stock</label>
+        <label><input type="checkbox" name="sync-customer-groups" checked="checked">Customer Groups</label>
         <?php submit_button('Force Sync Now'); ?>
     </form>
     </div>
@@ -220,6 +221,17 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
                 <?php
                     $time_taken = get_option(ARALCO_SLUG . '_last_sync_duration_stock');
                     $count = get_option(ARALCO_SLUG . '_last_sync_stock_count');
+                    if ($time_taken > 0) $total_run_tiume += $time_taken;
+                    if ($count > 0) $total_records += $count;
+                    echo ($count !== false ? $count : '0') . ' (' .
+                        ($time_taken !== false ? $time_taken : '0') . 's)'
+                    ?>
+            </span> <span title="Customer Groups">
+                <span class="dashicons dashicons-admin-users" aria-hidden="true"></span>
+                <span class="screen-reader-text">Customer Groups:</span>
+                <?php
+                    $time_taken = get_option(ARALCO_SLUG . '_last_sync_duration_customer_groups');
+                    $count = get_option(ARALCO_SLUG . '_last_sync_customer_groups_count');
                     if ($time_taken > 0) $total_run_tiume += $time_taken;
                     if ($count > 0) $total_records += $count;
                     echo ($count !== false ? $count : '0') . ' (' .

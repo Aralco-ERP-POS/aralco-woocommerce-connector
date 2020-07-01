@@ -46,10 +46,12 @@ function aralco_admin_settings_select($options, $args){
             ?>
             <p style="color:#ff0000;"><?php print_r($error['message'])?></p>
         <?php }
-    } ?>
+    }
+    $count = count($args['options']);
+    ?>
     <select id="<?php echo esc_attr($args['label_for']) ?>"
            name="<?php echo ARALCO_SLUG ?>_options[<?php echo esc_attr($args['label_for']); ?>]<?php if ($multi) echo '[]' ?>"
-        <?php if (isset($args['multi'])) echo 'multiple size="5"' ?>
+        <?php if (isset($args['multi'])) echo 'multiple size="' . $count . '"' ?>
         <?php if ($multi) echo 'required="' . $args['required'] . '"' ?>
     ><?php
         foreach($args['options'] as $label => $value){

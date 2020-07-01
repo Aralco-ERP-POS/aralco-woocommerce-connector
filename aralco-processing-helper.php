@@ -1009,6 +1009,31 @@ class Aralco_Processing_Helper {
     }
 
     /**
+     * Syncs the Customer Groups
+     *
+     * @return true|WP_Error True if groupings were updated, or WP_Error if a problem occurred.
+     */
+    static function sync_customer_groups() {
+        try{
+            $start_time = new DateTime();
+        } catch(Exception $e) {}
+
+        $groups = Aralco_Connection_Helper::getCustomerGroups();
+        if ($groups instanceof WP_Error) return $groups;
+
+        update_option(ARALCO_SLUG . '_customer_groups', $groups, true);
+        update_option(ARALCO_SLUG . '_last_sync_customer_groups_count', count($groups));
+
+        try{
+            /** @noinspection PhpUndefinedVariableInspection */
+            $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
+            update_option(ARALCO_SLUG . '_last_sync_duration_customer_groups', $time_taken);
+        } catch(Exception $e) {}
+
+        return true;
+    }
+
+    /**
      * Processes and submits the order to Aralco
      *
      * @param int $order_id the id of the order to submit to Aralco
