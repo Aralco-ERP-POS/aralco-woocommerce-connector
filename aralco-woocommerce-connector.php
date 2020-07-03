@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.8.0
+ * Version: 1.9.0
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.1.1
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.8.0
+ * @version 1.9.0
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -712,7 +712,7 @@ class Aralco_WooCommerce_Connector {
         // if logged in,
         if (is_user_logged_in()) {
             $orig_price = wc_get_price_to_display($product);
-            $new_price = $this::get_customer_group_price($orig_price);
+            $new_price = $this::get_customer_group_price($orig_price, $product->get_id());
 
             // check if a discount was applied. if not, nothing to do.
             if(abs($new_price - $orig_price) < 0.00001) return $price_html;
@@ -746,7 +746,7 @@ class Aralco_WooCommerce_Connector {
             $price = $product->get_price();
 
             // No discount applied, so nothing to do.
-            $new_price = $this::get_customer_group_price($price);
+            $new_price = $this::get_customer_group_price($price, $product->get_id());
             if(abs($new_price - $price) < 0.00001) continue;
 
             // Modify the price
@@ -758,11 +758,23 @@ class Aralco_WooCommerce_Connector {
      * Takes the normal price and returns the discounted price.
      *
      * @param float $normal_price
+     * @param int $product_id
      * @return float
      */
-    private function get_customer_group_price($normal_price) {
+    private function get_customer_group_price($normal_price, $product_id) {
         global $current_aralco_user;
         global $aralco_groups;
+
+        $group_prices = get_post_meta($product_id, '_group_prices', true);
+        if (is_array($group_prices) && count($group_prices) > 0) {
+            $group_price = array_values(array_filter($group_prices, function($item) use ($current_aralco_user) {
+                return $item['CustomerGroupID'] === $current_aralco_user['customerGroupID'];
+            }));
+            if (count($group_price) > 0 && is_numeric($group_price[0]['Price']) && $group_price[0]['Price'] > 0){
+                return $group_price[0]['Price'];
+            }
+        }
+
         if (isset($current_aralco_user['customerGroupID']) && count($aralco_groups) > 0){
             $new = array_values(array_filter($aralco_groups, function($item) use ($current_aralco_user) {
                 return $item['customerGroupID'] === $current_aralco_user['customerGroupID'];

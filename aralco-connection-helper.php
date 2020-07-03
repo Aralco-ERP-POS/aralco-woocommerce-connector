@@ -106,7 +106,7 @@ class Aralco_Connection_Helper {
         $options = get_option(ARALCO_SLUG . '_options');
         $curl = curl_init();
         curl_setopt($curl, CURLOPT_URL, $options[ARALCO_SLUG . '_field_api_location'] .
-                                        'api/Product/Updated?from=' . $start_time . '&wGrouping=true');
+                                        'api/Product/Updated?from=' . $start_time . '&wGrouping=true&wGroupPrice=true');
         curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false); // Disable SSL verification
         curl_setopt($curl, CURLOPT_RETURNTRANSFER, true); // Return instead of printing
         curl_setopt($curl, CURLOPT_HTTPHEADER, array(

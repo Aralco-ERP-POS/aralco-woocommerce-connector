@@ -138,6 +138,10 @@ class Aralco_Processing_Helper {
         update_post_meta($post_id, '_visibility', 'visible');
         update_post_meta($post_id, '_aralco_id', $item['ProductID']);
 
+        if(is_array($item['Product']['CustomerGroupPrices']) && count($item['Product']['CustomerGroupPrices']) > 0){
+            update_post_meta($post_id, '_group_prices', $item['Product']['CustomerGroupPrices']);
+        }
+
         $has_dim = $item['Product']['HasDimension'];
 
         if($has_dim){
