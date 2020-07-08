@@ -239,7 +239,7 @@ class Aralco_Connection_Helper {
         $options = get_option(ARALCO_SLUG . '_options');
         $curl = curl_init();
         curl_setopt($curl, CURLOPT_URL, $options[ARALCO_SLUG . '_field_api_location'] .
-                                        'api/Inventory/Updated?from=' . $start_time . '&to=' . $to_time);
+                                        'api/Inventory/Updated?from=' . $start_time . '&to=' . $to_time . '&totals=true');
         curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false); // Disable SSL verification
         curl_setopt($curl, CURLOPT_RETURNTRANSFER, true); // Return instead of printing
         curl_setopt($curl, CURLOPT_HTTPHEADER, array(

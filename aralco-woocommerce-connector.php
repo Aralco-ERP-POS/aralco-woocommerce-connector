@@ -3,18 +3,18 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.9.0
+ * Version: 1.9.1
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
- * Tested up to: 5.4.1
+ * Tested up to: 5.4.2
  * Text Domain: aralco_woocommerce_connector
  * Domain Path: /languages/
  * WC requires at least: 4.0
- * WC tested up to: 4.1.1
+ * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.9.0
+ * @version 1.9.1
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -763,7 +763,7 @@ class Aralco_WooCommerce_Connector {
      */
     private function get_customer_group_price($normal_price, $product_id) {
         global $current_aralco_user;
-        global $aralco_groups;
+//        global $aralco_groups;
 
         $group_prices = get_post_meta($product_id, '_group_prices', true);
         if (is_array($group_prices) && count($group_prices) > 0) {
@@ -775,14 +775,14 @@ class Aralco_WooCommerce_Connector {
             }
         }
 
-        if (isset($current_aralco_user['customerGroupID']) && count($aralco_groups) > 0){
-            $new = array_values(array_filter($aralco_groups, function($item) use ($current_aralco_user) {
-                return $item['customerGroupID'] === $current_aralco_user['customerGroupID'];
-            }));
-            if (count($new) > 0 && is_numeric($new[0]['discountPercent']) && $new[0]['discountPercent'] > 0){
-                return round($normal_price * (1.0 - (floatval($new[0]['discountPercent']) / 100)), 2);
-            }
-        }
+//        if (isset($current_aralco_user['customerGroupID']) && count($aralco_groups) > 0){
+//            $new = array_values(array_filter($aralco_groups, function($item) use ($current_aralco_user) {
+//                return $item['customerGroupID'] === $current_aralco_user['customerGroupID'];
+//            }));
+//            if (count($new) > 0 && is_numeric($new[0]['discountPercent']) && $new[0]['discountPercent'] > 0){
+//                return round($normal_price * (1.0 - (floatval($new[0]['discountPercent']) / 100)), 2);
+//            }
+//        }
 
         return $normal_price;
     }
