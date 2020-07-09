@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.9.1
+ * Version: 1.10.0
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.9.1
+ * @version 1.10.0
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -71,10 +71,22 @@ class Aralco_WooCommerce_Connector {
             // register custom product taxonomy
             add_action('admin_init', array($this, 'register_product_taxonomy'));
 
-            // register customer group price hooks
+            // register customer group price and UoM hooks
 
             add_filter('woocommerce_get_price_html', array($this, 'alter_price_display'), 100, 2);
+            add_filter('woocommerce_cart_item_price', array($this, 'alter_cart_price_display'), 100, 2);
+            add_filter('woocommerce_checkout_cart_item_quantity', array($this, 'alter_cart_quantity_display'), 100, 3);
             add_action('woocommerce_before_calculate_totals', array($this, 'alter_price_cart'), 100);
+            add_action('woocommerce_format_stock_quantity', array($this, 'alter_availability_text'), 100, 2);
+            add_filter('woocommerce_loop_add_to_cart_link', array($this, 'replacing_add_to_cart_button'), 100, 2);
+            add_filter('woocommerce_after_quantity_input_field', array($this, 'replace_quantity_field'), 100, 2);
+            add_filter('woocommerce_after_add_to_cart_button', array($this, 'add_decimal_text'), 100, 2);
+            add_filter('woocommerce_add_to_cart_qty_html', array($this, 'add_to_cart_qty_html'), 100, 2);
+            add_filter('woocommerce_cart_item_quantity', array($this, 'cart_item_quantity'), 100, 3);
+            add_filter('woocommerce_cart_contents_count', array($this, 'cart_contents_count'), 100, 2);
+            add_filter('woocommerce_widget_cart_item_quantity', array($this, 'widget_cart_item_quantity'), 100, 3);
+            add_filter('woocommerce_order_item_quantity_html', array($this, 'order_item_quantity_html'), 100, 2);
+            add_filter('woocommerce_email_order_item_quantity', array($this, 'order_item_quantity_html'), 100, 2);
         } else {
             // Show admin notice that WooCommerce needs to be active.
             add_action('admin_notices', array($this, 'plugin_not_available'));
@@ -703,8 +715,11 @@ class Aralco_WooCommerce_Connector {
      * @return string
      */
     public function alter_price_display($price_html, $product) {
+        $sell_by = get_post_meta($product->get_id(), '_aralco_sell_by', true);
+        $unit = (is_array($sell_by))? '/' . $sell_by['code'] : '';
+
         // only modify the price on the front end. Leave the admin panel alone
-        if (is_admin()) return $price_html;
+        if (is_admin()) return $price_html . $unit;
 
         // if there is no price, there's nothing to do.
         if ($product->get_price() === '') return $price_html;
@@ -715,17 +730,50 @@ class Aralco_WooCommerce_Connector {
             $new_price = $this::get_customer_group_price($orig_price, $product->get_id());
 
             // check if a discount was applied. if not, nothing to do.
-            if(abs($new_price - $orig_price) < 0.00001) return $price_html;
+            if(abs($new_price - $orig_price) < 0.00001) return $price_html . $unit;
 
             // Update the show price
             $price_html = wc_price($new_price);
         }
-
-        return $price_html;
-
+        return $price_html . $unit;
     }
+
     /**
-     * Changes the display price based on customer group discount
+     * @param string $price_html
+     * @param array $product
+     * @return string
+     */
+    public function alter_cart_price_display($price_html, $product) {
+        $sell_by = get_post_meta($product['product_id'], '_aralco_sell_by', true);
+        $unit = (is_array($sell_by))? '/' . $sell_by['code'] : '';
+        if (!empty($unit)){
+            $decimals = (is_array($sell_by) && is_numeric($sell_by['decimals']))? $sell_by['decimals'] : 0;
+            if($decimals > 0){
+                return wc_get_product($product['product_id'])->get_price_html();
+            }
+        }
+        return $price_html . $unit;	// change weight measurement here
+    }
+
+    /**
+     * @param string $quantity_html
+     * @param array $cart_item
+     * @param string $cart_item_key
+     * @return string
+     */
+    public function alter_cart_quantity_display($quantity_html, $cart_item, $cart_item_key) {
+        $sell_by = get_post_meta($cart_item['product_id'], '_aralco_sell_by', true);
+        $unit = (is_array($sell_by))? ' ' . $sell_by['code'] . ' ' : '';
+        $decimals = (is_array($sell_by) && is_numeric($sell_by['decimals']))? $sell_by['decimals'] : 0;
+        $quantity = $cart_item['quantity'];
+        if ($decimals > 0) {
+            $quantity = $cart_item['quantity'] / (10 ** $decimals);
+        }
+        return ' <strong class="product-quantity">' . sprintf('&times; %s', $quantity) . $unit . '</strong>';	// change weight measurement here
+    }
+
+    /**
+     * Changes the display price based on customer group discount and UoM
      *
      * @param WC_Cart $cart
      */
@@ -752,6 +800,187 @@ class Aralco_WooCommerce_Connector {
             // Modify the price
             $cart_item['data']->set_price($new_price);
         }
+
+        // Once again for UoM
+        /** @var WC_Product[] $cart_item */
+        foreach ($cart->get_cart() as $cart_item_key => $cart_item) {
+            $product = $cart_item['data'];
+
+            $sell_by = get_post_meta($product->get_id(), '_aralco_sell_by', true);
+            if(!is_array($sell_by)) continue;
+
+            $unit = (is_array($sell_by) && !empty($sell_by['code']))? ' ' . $sell_by['code'] : '';
+            if(empty($unit)) continue;
+
+            $decimals = (is_array($sell_by) && is_numeric($sell_by['decimals']))? $sell_by['decimals'] : 0;
+            if($decimals <= 0) continue;
+
+            // Modify the price
+            $cart_item['data']->set_price(doubleval($product->get_price()) / (10 ** $decimals));
+        }
+    }
+
+    /**
+     * @param int $stock_quantity Stock quantity
+     * @param WC_Product $product Product instance
+     * @return string
+     */
+    public function alter_availability_text($stock_quantity, $product) {
+        $sell_by = get_post_meta($product->get_id(), '_aralco_sell_by', true);
+        $unit = (is_array($sell_by) && !empty($sell_by['code']))? ' ' . $sell_by['code'] : '';
+        $multi = (is_array($sell_by) && is_numeric($sell_by['multi']))? $sell_by['multi'] : 1;
+        $decimals = (is_array($sell_by) && is_numeric($sell_by['decimals']))? $sell_by['decimals'] : 0;
+        return floor($stock_quantity / $multi) . $unit;
+    }
+
+    /**
+     * @param string $button
+     * @param WC_Product $product
+     * @return string
+     */
+    public function replacing_add_to_cart_button($button, $product) {
+        $sell_by = get_post_meta($product->get_id(), '_aralco_sell_by', true);
+        $is_unit = is_array($sell_by) && !empty($sell_by['code']);
+        if ($is_unit) {
+            $button_text = __("Read more", "woocommerce");
+            $button = '<a class="button" href="' . $product->get_permalink() . '">' . $button_text . '</a>';
+        }
+        return $button;
+    }
+
+    public function replace_quantity_field() {
+        if (is_cart()) return;
+        /** @var $product WC_Product */
+        global $product;
+        $sell_by = get_post_meta($product->get_id(), '_aralco_sell_by', true);
+        $is_unit = is_array($sell_by) && !empty($sell_by['code']);
+        if($is_unit) {
+            $decimal = (!empty($sell_by['decimals']))? $sell_by['decimals'] : 0;
+            if ($decimal > 0) {
+                $min = number_format(1 / (10 ** $decimal), $decimal);
+                wc_enqueue_js(/** @lang JavaScript */ "$('input.qty').prop('value', '1').prop('step', '${min}').prop('min', '${min}');
+$('form.cart').on('submit', function() {
+    let decVal = parseFloat(document.querySelector('input.qty').value);
+    document.querySelector('input.qty').value = decVal * Math.pow(10, ${decimal});
+})");
+                echo $sell_by['code'];
+            }
+        }
+    }
+
+    /**
+     * @param string $product_quantity
+     * @param int|string $cart_item_key
+     * @param array $cart_item
+     * @return string
+     */
+    public function cart_item_quantity($product_quantity, $cart_item_key, $cart_item) {
+        $sell_by = get_post_meta($cart_item['product_id'], '_aralco_sell_by', true);
+        $is_unit = is_array($sell_by) && !empty($sell_by['code']);
+        if($is_unit) {
+            $decimal = (!empty($sell_by['decimals']))? $sell_by['decimals'] : 0;
+            if ($decimal > 0) {
+                $min = number_format(1 / (10 ** $decimal), $decimal);
+                $code = $sell_by['code'];
+                $repeated_snippet = /** @lang JavaScript */ "let val = parseInt($('input[name=\"cart[$cart_item_key][qty]\"]').prop('value')) / Math.pow(10, ${decimal});
+$('input[name=\"cart[$cart_item_key][qty]\"]').prop('min', '${min}').prop('value', val).prop('step', '${min}').on('keypress', function(e) {
+    if(e.which == 13) {
+        $('input[name=\"cart[$cart_item_key][qty]\"]').blur();
+        $('button[name=update_cart]').click();
+    }
+}).after('&nbsp;$code');
+$('form.woocommerce-cart-form').on('submit', function() {
+    let decVal = parseFloat(document.querySelector('input[name=\"cart[$cart_item_key][qty]\"]').value);
+    document.querySelector('input[name=\"cart[$cart_item_key][qty]\"]').value = decVal * Math.pow(10, ${decimal});
+});";
+                wc_enqueue_js(/** @lang JavaScript */ "$repeated_snippet
+$(document.body).on('updated_wc_div', function() {
+$repeated_snippet
+})");
+            }
+        }
+        return $product_quantity;
+    }
+
+    public function add_to_cart_qty_html($amount_html) {
+        return '';
+    }
+
+    public function add_decimal_text() {
+        /** @var $product WC_Product */
+        global $product;
+        $sell_by = get_post_meta($product->get_id(), '_aralco_sell_by', true);
+        $is_unit = is_array($sell_by) && !empty($sell_by['code']);
+        if($is_unit) {
+            $decimal = (!empty($sell_by['decimals']))? $sell_by['decimals'] : 0;
+            if($decimal > 0) {
+                echo "<div>Up to ${decimal} decimal places.</div>";
+            }
+        }
+    }
+
+    /**
+     * @param int $quantity
+     * @return int
+     */
+    public function cart_contents_count($quantity){
+        global $woocommerce;
+        $items = $woocommerce->cart->get_cart();
+        $count = 0;
+        foreach ($items as $item){
+            $sell_by = get_post_meta($item['product_id'], '_aralco_sell_by', true);
+            $is_unit = is_array($sell_by) && !empty($sell_by['code']);
+            $count += ($is_unit)? 1 : $item['quantity'];
+        }
+        return $count;
+    }
+
+    /**
+     * @param string $quantity_html
+     * @param array $cart_item
+     * @param string|int $cart_item_key
+     * @return string
+     */
+    public function widget_cart_item_quantity($quantity_html, $cart_item, $cart_item_key){
+        $sell_by = get_post_meta($cart_item['product_id'], '_aralco_sell_by', true);
+        $unit = (is_array($sell_by) && !empty($sell_by['code']))? ' ' . $sell_by['code'] : '';
+        $decimals = (is_array($sell_by) && is_numeric($sell_by['decimals']))? $sell_by['decimals'] : 0;
+        $quantity = ($decimals > 0)? $cart_item['quantity'] / (10 ** $decimals) : $cart_item['quantity'];
+        $product_price = apply_filters('woocommerce_cart_item_price', WC()->cart->get_product_price(wc_get_product($cart_item['product_id'])), $cart_item, $cart_item_key);
+        return '<span class="quantity">' . sprintf( '%s &times; %s', $quantity . $unit, $product_price ) . '</span>';
+    }
+
+    /**
+     * @param string $html
+     * @param WC_Order_Item_Product $item
+     * @return string
+     */
+    public function order_item_quantity_html($html, $item) {
+        $sell_by = get_post_meta($item->get_product_id(), '_aralco_sell_by', true);
+        if (!is_array($sell_by)) return $html;
+
+        $unit = (!empty($sell_by['code']))? ' ' . $sell_by['code'] : '';
+        if (empty($sell_by['code'])) return $html;
+
+        $decimals = (is_array($sell_by) && is_numeric($sell_by['decimals']))? $sell_by['decimals'] : 0;
+        if ($decimals <= 0) return $html . $unit;
+
+        $order = $item->get_order();
+        $refunded_qty = $order->get_qty_refunded_for_item($item->get_id());
+        $qty = $item->get_quantity() / (10 ** $decimals);
+
+        if ($refunded_qty) {
+            $refunded_qty = $refunded_qty / (10 ** $decimals);
+            $qty_display = '<del>' . esc_html($qty) . '</del> <ins>' . esc_html($qty - ($refunded_qty * -1)) . '</ins>';
+        } else {
+            $qty_display = esc_html($qty);
+        }
+
+        if(strpos($html, 'product-quantity') !== false) {
+            return ' <strong class="product-quantity">' . sprintf( '&times;&nbsp;%s', $qty_display ) . '</strong>' . $unit;
+        }
+
+        return $qty_display . $unit;
     }
 
     /**
@@ -786,7 +1015,6 @@ class Aralco_WooCommerce_Connector {
 
         return $normal_price;
     }
-
 
     /**
      * Catches completed orders and pushes them back to Aralco

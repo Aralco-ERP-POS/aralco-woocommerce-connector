@@ -137,6 +137,13 @@ class Aralco_Processing_Helper {
         update_post_meta($post_id, '_sku', $item['Product']['Code']);
         update_post_meta($post_id, '_visibility', 'visible');
         update_post_meta($post_id, '_aralco_id', $item['ProductID']);
+        if(is_array($item['Product']['SellBy']) && !empty($item['Product']['SellBy']['Code'])){
+            update_post_meta($post_id, '_aralco_sell_by', array(
+                'code' => $item['Product']['SellBy']['Code'],
+                'multi' => !empty($item['Product']['SellBy']['Multiplicator']) ? $item['Product']['SellBy']['Multiplicator'] : 1,
+                'decimals' => !empty($item['Product']['QtyDecimals']) ? $item['Product']['QtyDecimals'] : 0,
+            ));
+        }
 
         if(is_array($item['Product']['CustomerGroupPrices']) && count($item['Product']['CustomerGroupPrices']) > 0){
             update_post_meta($post_id, '_group_prices', $item['Product']['CustomerGroupPrices']);
@@ -1138,12 +1145,27 @@ class Aralco_Processing_Helper {
                 $aralco_product_id = get_post_meta($product->get_parent_id(), '_aralco_id', true);
             }
 
+            $quantity = $item->get_quantity();
+
+            $sell_by = get_post_meta($product->get_id(), '_aralco_sell_by', true);
+            $unit = (is_array($sell_by))? ' ' . $sell_by['code'] . ' ' : '';
+            if(is_array($unit)) {
+                $decimals = (is_array($sell_by) && is_numeric($sell_by['decimals']))? $sell_by['decimals'] : 0;
+                if ($decimals > 0) {
+                    $quantity = $quantity / (10 ** $decimals);
+                }
+            }
+
+            // TODO: Remove this. Aralco API only accepts int for quantity?
+            if ($quantity < 1) $quantity = 1;
+            $quantity = round($quantity);
+
             array_push($aralco_order['items'], array(
                 'productId'    => intval($aralco_product_id),
                 'code'         => $product->get_sku(),
                 'price'        => $price,
                 'discount'     => 0,
-                'quantity'     => $item->get_quantity(),
+                'quantity'     => $quantity,
                 'weight'       => 0,
                 'gridId1'      => (is_array($grids) && isset($grids['gridId1']) && !empty($grids['gridId1'])) ? $grids['gridId1'] : null,
                 'gridId2'      => (is_array($grids) && isset($grids['gridId2']) && !empty($grids['gridId2'])) ? $grids['gridId2'] : null,
