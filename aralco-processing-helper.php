@@ -137,12 +137,21 @@ class Aralco_Processing_Helper {
         update_post_meta($post_id, '_sku', $item['Product']['Code']);
         update_post_meta($post_id, '_visibility', 'visible');
         update_post_meta($post_id, '_aralco_id', $item['ProductID']);
+
+        $price = $item['Product']['Price'];
+        $discount_price = isset($item['Product']['DiscountPrice']) ? $item['Product']['DiscountPrice'] : $item['Product']['Price'];
+
         if(is_array($item['Product']['SellBy']) && !empty($item['Product']['SellBy']['Code'])){
-            update_post_meta($post_id, '_aralco_sell_by', array(
+            $sell_by = array(
                 'code' => $item['Product']['SellBy']['Code'],
                 'multi' => !empty($item['Product']['SellBy']['Multiplicator']) ? $item['Product']['SellBy']['Multiplicator'] : 1,
                 'decimals' => !empty($item['Product']['QtyDecimals']) ? $item['Product']['QtyDecimals'] : 0,
-            ));
+            );
+            update_post_meta($post_id, '_aralco_sell_by', $sell_by);
+            if($sell_by['multi'] > 1) {
+                $discount_price = $discount_price * $sell_by['multi'];
+                $price = $price * $sell_by['multi'];
+            }
         }
 
         if(is_array($item['Product']['CustomerGroupPrices']) && count($item['Product']['CustomerGroupPrices']) > 0){
@@ -195,11 +204,9 @@ class Aralco_Processing_Helper {
         $product->set_description($item['Product']['Description']);
         $product->set_short_description($item['Product']['SeoDescription']);
         if(!$has_dim) {
-            $product->set_regular_price($item['Product']['Price']);
-            $product->set_sale_price(
-                isset($item['Product']['DiscountPrice']) ? $item['Product']['DiscountPrice'] : $item['Product']['Price']
-            );
-            $product->set_price(isset($item['Product']['DiscountPrice'])? $item['Product']['DiscountPrice'] : $item['Product']['Price']);
+            $product->set_regular_price($price);
+            $product->set_sale_price($discount_price);
+            $product->set_price($discount_price);
         }
         $product->set_featured(($item['Product']['Featured'] == true));
         if(isset($item['Product']['WebProperties']['Weight'])){

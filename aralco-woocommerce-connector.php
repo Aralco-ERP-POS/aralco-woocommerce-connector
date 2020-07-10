@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.10.0
+ * Version: 1.10.1
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.10.0
+ * @version 1.10.1
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -842,7 +842,7 @@ class Aralco_WooCommerce_Connector {
         $sell_by = get_post_meta($product->get_id(), '_aralco_sell_by', true);
         $is_unit = is_array($sell_by) && !empty($sell_by['code']);
         if ($is_unit) {
-            $button_text = __("Read more", "woocommerce");
+            $button_text = __("Add to cart", "woocommerce");
             $button = '<a class="button" href="' . $product->get_permalink() . '">' . $button_text . '</a>';
         }
         return $button;
@@ -1000,7 +1000,13 @@ $repeated_snippet
                 return $item['CustomerGroupID'] === $current_aralco_user['customerGroupID'];
             }));
             if (count($group_price) > 0 && is_numeric($group_price[0]['Price']) && $group_price[0]['Price'] > 0){
-                return $group_price[0]['Price'];
+                $normal_price = $group_price[0]['Price'];
+
+                $sell_by = get_post_meta($product_id, '_aralco_sell_by', true);
+                if (!is_array($sell_by)) return $normal_price;
+
+                $multi = (is_numeric($sell_by['multi']))? $sell_by['multi'] : 1;
+                if ($multi > 1) return $normal_price * $multi;
             }
         }
 
