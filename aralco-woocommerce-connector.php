@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.11.1
+ * Version: 1.11.2
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.11.1
+ * @version 1.11.2
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -787,21 +787,20 @@ class Aralco_WooCommerce_Connector {
         // Required so we do it at the right time and not more than once
         if (did_action('woocommerce_before_calculate_totals') >= 2) return;
 
-        // Needs to be logged in
-        if (!is_user_logged_in()) return;
-
         // Apply the discount to each item
         /** @var WC_Product[] $cart_item */
-        foreach ($cart->get_cart() as $cart_item_key => $cart_item) {
-            $product = $cart_item['data'];
-            $price = $product->get_price();
+        if(is_user_logged_in()) {
+            foreach ($cart->get_cart() as $cart_item_key => $cart_item) {
+                $product = $cart_item['data'];
+                $price = $product->get_price();
 
-            // No discount applied, so nothing to do.
-            $new_price = $this::get_customer_group_price($price, $product->get_id());
-            if(abs($new_price - $price) < 0.00001) continue;
+                // No discount applied, so nothing to do.
+                $new_price = $this::get_customer_group_price($price, $product->get_id());
+                if (abs($new_price - $price) < 0.00001) continue;
 
-            // Modify the price
-            $cart_item['data']->set_price($new_price);
+                // Modify the price
+                $cart_item['data']->set_price($new_price);
+            }
         }
 
         // Once again for UoM
@@ -866,7 +865,7 @@ class Aralco_WooCommerce_Connector {
                 $min = number_format(1 / (10 ** $decimal), $decimal);
                 $size = $decimal + 4;
                 wc_enqueue_js(/** @lang JavaScript */ "$('input.qty').prop('value', '').prop('step', '${min}')
-.prop('min', '${min}').prop('inputmode', 'decimal').prop('size', '${size}').css('width', 'unset').attr('inputmode', 'decimal')
+.prop('min', '${min}').prop('inputmode', 'decimal').prop('size', '${size}').css('width', '100px').attr('inputmode', 'decimal')
 .prop('name', '').after('<input type=\"hidden\" class=\"true-qty\" name=\"quantity\" value=\"\">');
 $('form.cart').on('submit', function() {
     if(!document.querySelector('input.qty').value) return false;
