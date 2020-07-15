@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.11.0
+ * Version: 1.11.1
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.11.0
+ * @version 1.11.1
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -728,8 +728,8 @@ class Aralco_WooCommerce_Connector {
         if (is_admin()) return $price_html . $unit;
 
         // if logged in,
+        $orig_price = wc_get_price_to_display($product);
         if (is_user_logged_in()) {
-            $orig_price = wc_get_price_to_display($product);
             $new_price = $this::get_customer_group_price($orig_price, $product->get_id(), true);
 
             // check if a discount was applied. if not, nothing to do.
@@ -737,6 +737,8 @@ class Aralco_WooCommerce_Connector {
 
             // Update the show price
             $price_html = wc_price($new_price);
+        } else if (is_array($retail_by) && is_numeric($retail_by['price'])) {
+            $price_html = wc_price($retail_by['price']);
         }
         return $price_html . $unit;
     }
@@ -1047,7 +1049,6 @@ $repeated_snippet
      */
     private function get_customer_group_price($normal_price, $product_id, $is_retail_by_price = false) {
         global $current_aralco_user;
-//        global $aralco_groups;
 
         $group_prices = get_post_meta($product_id, '_group_prices', true);
         if (is_array($group_prices) && count($group_prices) > 0) {
