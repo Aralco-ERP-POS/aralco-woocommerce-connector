@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.10.1
+ * Version: 1.11.0
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.10.1
+ * @version 1.11.0
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -87,6 +87,8 @@ class Aralco_WooCommerce_Connector {
             add_filter('woocommerce_widget_cart_item_quantity', array($this, 'widget_cart_item_quantity'), 100, 3);
             add_filter('woocommerce_order_item_quantity_html', array($this, 'order_item_quantity_html'), 100, 2);
             add_filter('woocommerce_email_order_item_quantity', array($this, 'order_item_quantity_html'), 100, 2);
+            add_filter('woocommerce_display_item_meta', array($this, 'display_item_meta'), 100, 3);
+            add_filter('woocommerce_email', array($this, 'email'), 100);
         } else {
             // Show admin notice that WooCommerce needs to be active.
             add_action('admin_notices', array($this, 'plugin_not_available'));
@@ -715,19 +717,20 @@ class Aralco_WooCommerce_Connector {
      * @return string
      */
     public function alter_price_display($price_html, $product) {
+        $retail_by = get_post_meta($product->get_id(), '_aralco_retail_by', true);
         $sell_by = get_post_meta($product->get_id(), '_aralco_sell_by', true);
-        $unit = (is_array($sell_by))? '/' . $sell_by['code'] : '';
-
-        // only modify the price on the front end. Leave the admin panel alone
-        if (is_admin()) return $price_html . $unit;
+        $unit = (is_array($retail_by) && !is_admin())? '/' . $retail_by['code'] : ((is_array($sell_by))? '/' . $sell_by['code'] : '');
 
         // if there is no price, there's nothing to do.
         if ($product->get_price() === '') return $price_html;
 
+        // only modify the price on the front end. Leave the admin panel alone
+        if (is_admin()) return $price_html . $unit;
+
         // if logged in,
         if (is_user_logged_in()) {
             $orig_price = wc_get_price_to_display($product);
-            $new_price = $this::get_customer_group_price($orig_price, $product->get_id());
+            $new_price = $this::get_customer_group_price($orig_price, $product->get_id(), true);
 
             // check if a discount was applied. if not, nothing to do.
             if(abs($new_price - $orig_price) < 0.00001) return $price_html . $unit;
@@ -744,13 +747,11 @@ class Aralco_WooCommerce_Connector {
      * @return string
      */
     public function alter_cart_price_display($price_html, $product) {
+        $retail_by = get_post_meta($product['product_id'], '_aralco_retail_by', true);
         $sell_by = get_post_meta($product['product_id'], '_aralco_sell_by', true);
-        $unit = (is_array($sell_by))? '/' . $sell_by['code'] : '';
+        $unit = (is_array($retail_by) && !is_admin())? '/' . $retail_by['code'] : ((is_array($sell_by))? '/' . $sell_by['code'] : '');
         if (!empty($unit)){
-            $decimals = (is_array($sell_by) && is_numeric($sell_by['decimals']))? $sell_by['decimals'] : 0;
-            if($decimals > 0){
-                return wc_get_product($product['product_id'])->get_price_html();
-            }
+            return wc_get_product($product['product_id'])->get_price_html();
         }
         return $price_html . $unit;	// change weight measurement here
     }
@@ -830,7 +831,10 @@ class Aralco_WooCommerce_Connector {
         $unit = (is_array($sell_by) && !empty($sell_by['code']))? ' ' . $sell_by['code'] : '';
         $multi = (is_array($sell_by) && is_numeric($sell_by['multi']))? $sell_by['multi'] : 1;
         $decimals = (is_array($sell_by) && is_numeric($sell_by['decimals']))? $sell_by['decimals'] : 0;
-        return floor($stock_quantity / $multi) . $unit;
+        if($decimals > 0) {
+            return round(($stock_quantity / $multi) / (10 ** $decimals), $decimals) . $unit;
+        }
+        return round($stock_quantity / $multi) . $unit;
     }
 
     /**
@@ -858,13 +862,17 @@ class Aralco_WooCommerce_Connector {
             $decimal = (!empty($sell_by['decimals']))? $sell_by['decimals'] : 0;
             if ($decimal > 0) {
                 $min = number_format(1 / (10 ** $decimal), $decimal);
-                wc_enqueue_js(/** @lang JavaScript */ "$('input.qty').prop('value', '1').prop('step', '${min}').prop('min', '${min}');
+                $size = $decimal + 4;
+                wc_enqueue_js(/** @lang JavaScript */ "$('input.qty').prop('value', '').prop('step', '${min}')
+.prop('min', '${min}').prop('inputmode', 'decimal').prop('size', '${size}').css('width', 'unset').attr('inputmode', 'decimal')
+.prop('name', '').after('<input type=\"hidden\" class=\"true-qty\" name=\"quantity\" value=\"\">');
 $('form.cart').on('submit', function() {
+    if(!document.querySelector('input.qty').value) return false;
     let decVal = parseFloat(document.querySelector('input.qty').value);
-    document.querySelector('input.qty').value = decVal * Math.pow(10, ${decimal});
+    document.querySelector('input.true-qty').value = decVal * Math.pow(10, ${decimal});
 })");
-                echo $sell_by['code'];
             }
+            echo $sell_by['code'];
         }
     }
 
@@ -879,25 +887,29 @@ $('form.cart').on('submit', function() {
         $is_unit = is_array($sell_by) && !empty($sell_by['code']);
         if($is_unit) {
             $decimal = (!empty($sell_by['decimals']))? $sell_by['decimals'] : 0;
+            $code = $sell_by['code'];
             if ($decimal > 0) {
                 $min = number_format(1 / (10 ** $decimal), $decimal);
-                $code = $sell_by['code'];
                 $repeated_snippet = /** @lang JavaScript */ "let val = parseInt($('input[name=\"cart[$cart_item_key][qty]\"]').prop('value')) / Math.pow(10, ${decimal});
-$('input[name=\"cart[$cart_item_key][qty]\"]').prop('min', '${min}').prop('value', val).prop('step', '${min}').on('keypress', function(e) {
+$('input[name=\"cart[$cart_item_key][qty]\"]').prop('min', '$min').prop('value', val).prop('step', '$min')
+.prop('inputmode', 'decimal').attr('inputmode', 'decimal').addClass('$cart_item_key').prop('name', '').attr('name', '')
+.on('keypress', function(e) {
     if(e.which == 13) {
-        $('input[name=\"cart[$cart_item_key][qty]\"]').blur();
+        $(this).blur();
         $('button[name=update_cart]').click();
     }
-}).after('&nbsp;$code');
+}).after('&nbsp;$code').after('<input type=\"hidden\" name=\"cart[$cart_item_key][qty]\" value=\"\">');
 $('form.woocommerce-cart-form').on('submit', function() {
-    let decVal = parseFloat(document.querySelector('input[name=\"cart[$cart_item_key][qty]\"]').value);
+    let decVal = parseFloat(document.querySelector('input.$cart_item_key').value);
     document.querySelector('input[name=\"cart[$cart_item_key][qty]\"]').value = decVal * Math.pow(10, ${decimal});
 });";
-                wc_enqueue_js(/** @lang JavaScript */ "$repeated_snippet
+            } else {
+                $repeated_snippet = /** @lang JavaScript */ "$('input[name=\"cart[$cart_item_key][qty]\"]').after('&nbsp;$code')";
+            }
+            wc_enqueue_js(/** @lang JavaScript */ "$repeated_snippet
 $(document.body).on('updated_wc_div', function() {
 $repeated_snippet
 })");
-            }
         }
         return $product_quantity;
     }
@@ -984,13 +996,56 @@ $repeated_snippet
     }
 
     /**
+     * Source copied from wc-template-functions.php function wc_display_item_meta
+     * @see ../woocommerce/includes/wc-template-functions.php
+     *
+     * @param string $old_html
+     * @param WC_Order_Item $item
+     * @param array $args
+     * @return string
+     */
+    public function display_item_meta($old_html, $item, $args) {
+        $strings = array();
+        $html = '';
+
+        foreach ($item->get_formatted_meta_data() as $meta_id => $meta) {
+            if ($meta->key == 'Backordered') {
+                $sell_by = get_post_meta($item->get_product_id(), '_aralco_sell_by', true);
+                $unit = (is_array($sell_by) && !empty($sell_by['code']))? ' ' . $sell_by['code'] : '';
+                $decimals = (is_array($sell_by) && is_numeric($sell_by['decimals']))? $sell_by['decimals'] : 0;
+                if ($decimals > 0) {
+                    $meta->display_value = round($meta->value / (10 ** $decimals), $decimals) . $unit;
+                }
+            }
+            $value = $args['autop']? wp_kses_post($meta->display_value) : wp_kses_post(make_clickable(trim($meta->display_value)));
+            $strings[] = $args['label_before'] . wp_kses_post($meta->display_key) . $args['label_after'] . $value;
+        }
+
+        if ($strings) {
+            $html = $args['before'] . implode($args['separator'], $strings) . $args['after'];
+        }
+
+        return $html;
+    }
+
+    /**
+     * @param WC_Email $email_class
+     */
+    public function email($email_class) {
+        remove_action('woocommerce_low_stock_notification', array($email_class, 'low_stock'));
+        remove_action('woocommerce_product_on_backorder_notification', array($email_class, 'backorder'));
+        remove_action('woocommerce_no_stock_notification', array($email_class, 'no_stock'));
+    }
+
+    /**
      * Takes the normal price and returns the discounted price.
      *
      * @param float $normal_price
      * @param int $product_id
+     * @param bool $is_retail_by_price
      * @return float
      */
-    private function get_customer_group_price($normal_price, $product_id) {
+    private function get_customer_group_price($normal_price, $product_id, $is_retail_by_price = false) {
         global $current_aralco_user;
 //        global $aralco_groups;
 
@@ -1002,10 +1057,15 @@ $repeated_snippet
             if (count($group_price) > 0 && is_numeric($group_price[0]['Price']) && $group_price[0]['Price'] > 0){
                 $normal_price = $group_price[0]['Price'];
 
-                $sell_by = get_post_meta($product_id, '_aralco_sell_by', true);
-                if (!is_array($sell_by)) return $normal_price;
+                $sell_or_retail_by = get_post_meta($product_id, '_aralco_sell_by', true);
+                if ($is_retail_by_price) {
+                    $temp = get_post_meta($product_id, '_aralco_retail_by', true);
+                    if(is_array($temp)) $sell_or_retail_by = $temp;
+                    unset($temp);
+                }
+                if (!is_array($sell_or_retail_by)) return $normal_price;
 
-                $multi = (is_numeric($sell_by['multi']))? $sell_by['multi'] : 1;
+                $multi = (is_numeric($sell_or_retail_by['multi']))? $sell_or_retail_by['multi'] : 1;
                 if ($multi > 1) return $normal_price * $multi;
             }
         }

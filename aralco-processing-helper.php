@@ -141,16 +141,28 @@ class Aralco_Processing_Helper {
         $price = $item['Product']['Price'];
         $discount_price = isset($item['Product']['DiscountPrice']) ? $item['Product']['DiscountPrice'] : $item['Product']['Price'];
 
-        if(is_array($item['Product']['SellBy']) && !empty($item['Product']['SellBy']['Code'])){
-            $sell_by = array(
-                'code' => $item['Product']['SellBy']['Code'],
-                'multi' => !empty($item['Product']['SellBy']['Multiplicator']) ? $item['Product']['SellBy']['Multiplicator'] : 1,
-                'decimals' => !empty($item['Product']['QtyDecimals']) ? $item['Product']['QtyDecimals'] : 0,
-            );
-            update_post_meta($post_id, '_aralco_sell_by', $sell_by);
-            if($sell_by['multi'] > 1) {
-                $discount_price = $discount_price * $sell_by['multi'];
-                $price = $price * $sell_by['multi'];
+        foreach (array('SellBy', 'RetailBy') as $sell_or_retail_by) {
+            if (is_array($item['Product'][$sell_or_retail_by]) && !empty($item['Product'][$sell_or_retail_by]['Code'])) {
+                if ($sell_or_retail_by == 'RetailBy' &&
+                    $item['Product']['SellBy']['Code'] == $item['Product']['RetailBy']['Code']) continue;
+                $sell_or_retail_by_data = array(
+                    'code' => $item['Product'][$sell_or_retail_by]['Code'],
+                    'multi' => !empty($item['Product'][$sell_or_retail_by]['Multiplicator'])? $item['Product'][$sell_or_retail_by]['Multiplicator'] : 1,
+                    'decimals' => !empty($item['Product']['QtyDecimals'])? $item['Product']['QtyDecimals'] : 0,
+                );
+                if ($sell_or_retail_by_data['multi'] > 1) {
+                    if($sell_or_retail_by == 'SellBy') {
+                        $price = $price * $sell_or_retail_by_data['multi'];
+                        $discount_price = $discount_price * $sell_or_retail_by_data['multi'];
+                    } else {
+                        $sell_or_retail_by_data['price'] = $item['Product']['Price'] * $sell_or_retail_by_data['multi'];
+                        $sell_or_retail_by_data['discount_price'] = (isset($item['Product']['DiscountPrice']) ?
+                            $item['Product']['DiscountPrice'] : $item['Product']['Price']) * $sell_or_retail_by_data['multi'];
+                    }
+                }
+
+                $meta_key = ($sell_or_retail_by == 'SellBy')? '_aralco_sell_by' : '_aralco_retail_by';
+                update_post_meta($post_id, $meta_key, $sell_or_retail_by_data);
             }
         }
 
@@ -638,10 +650,18 @@ class Aralco_Processing_Helper {
                 continue; //We will deal with those items later
             }
 
+            $available = $item['Available'];
+
+            // Upscale inventory if decimal unit
+            $sell_by = get_post_meta($product_id, '_aralco_sell_by', true);
+            if(is_array($sell_by) && is_numeric($sell_by['decimals']) && $sell_by['decimals'] > 0){
+                $available = $available * (10 ** $sell_by['decimals']);
+            }
+
             update_post_meta($product_id, '_manage_stock', 'yes');
             update_post_meta($product_id, '_backorders', 'notify');
-            update_post_meta($product_id, '_stock', $item['Available']);
-            update_post_meta($product_id, '_stock_status', ($item['Available'] >= 1) ? 'instock' : 'onbackorder');
+            update_post_meta($product_id, '_stock', $available);
+            update_post_meta($product_id, '_stock_status', ($available >= 1) ? 'instock' : 'onbackorder');
             $count++;
         }
 
