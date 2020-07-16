@@ -149,6 +149,12 @@ class List_Groupings_For_Department_Widget extends WP_Widget{
 <button class="button" type="submit">Show Results</button>
 </div></form></div>' . $args['after_widget'];
             wc_enqueue_js('
+$("#s, #min_price, #max_price").on("keydown", function(e){
+    if (13 === e.which) {
+        e.preventDefault();
+        $("#product-filter-form").submit();
+    }
+});
 $(".js-use-select2 select").select2({
     placeholder: "Any",
     width: "100%"

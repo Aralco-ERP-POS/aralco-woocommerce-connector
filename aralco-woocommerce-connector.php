@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.11.2
+ * Version: 1.11.3
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.11.2
+ * @version 1.11.3
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -80,6 +80,7 @@ class Aralco_WooCommerce_Connector {
             add_action('woocommerce_format_stock_quantity', array($this, 'alter_availability_text'), 100, 2);
             add_filter('woocommerce_loop_add_to_cart_link', array($this, 'replacing_add_to_cart_button'), 100, 2);
             add_filter('woocommerce_after_quantity_input_field', array($this, 'replace_quantity_field'), 100, 2);
+            add_filter('woocommerce_blocks_product_grid_item_html', array($this, 'blocks_product_grid_item_html'), 100, 3);
             add_filter('woocommerce_after_add_to_cart_button', array($this, 'add_decimal_text'), 100, 2);
             add_filter('woocommerce_add_to_cart_qty_html', array($this, 'add_to_cart_qty_html'), 100, 2);
             add_filter('woocommerce_cart_item_quantity', array($this, 'cart_item_quantity'), 100, 3);
@@ -839,18 +840,61 @@ class Aralco_WooCommerce_Connector {
     }
 
     /**
-     * @param string $button
+     * @param string $html
      * @param WC_Product $product
      * @return string
      */
-    public function replacing_add_to_cart_button($button, $product) {
+    public function replacing_add_to_cart_button($html, $product) {
         $sell_by = get_post_meta($product->get_id(), '_aralco_sell_by', true);
         $is_unit = is_array($sell_by) && !empty($sell_by['code']);
         if ($is_unit) {
-            $button_text = __("Add to cart", "woocommerce");
-            $button = '<a class="button" href="' . $product->get_permalink() . '">' . $button_text . '</a>';
+            $button_text = __("Select qty", "woocommerce");
+            $html = '<a class="button" href="' . $product->get_permalink() . '">' . $button_text . '</a>';
         }
-        return $button;
+        return $html;
+    }
+
+    /**
+     * @param string $html
+     * @param object $data
+     * @param WC_Product $product
+     * @return string
+     */
+    public function blocks_product_grid_item_html($html, $data, $product) {
+        $sell_by = get_post_meta($product->get_id(), '_aralco_sell_by', true);
+        if(!is_array($sell_by) || empty($sell_by['code'])) return $html;
+
+        $attributes = array(
+            'aria-label'       => $product->add_to_cart_description(),
+//            'data-quantity'    => '1',
+//            'data-product_id'  => $product->get_id(),
+//            'data-product_sku' => $product->get_sku(),
+            'rel'              => 'nofollow',
+            'class'            => 'wp-block-button__link add_to_cart_button',
+        );
+
+        if ($product->supports('ajax_add_to_cart')) {
+            $attributes['class'] .= ' ajax_add_to_cart';
+        }
+
+        $button = sprintf(
+            '<a href="%s" %s>%s</a>',
+            esc_url($product->get_permalink()),
+            wc_implode_html_attributes( $attributes ),
+            esc_html(__('Select qty', ARALCO_SLUG)/*$product->add_to_cart_text()*/)
+        );
+        $button = '<div class="wp-block-button wc-block-grid__product-add-to-cart">' . $button. '</div>';
+
+        return "<li class=\"wc-block-grid__product\">
+    <a href=\"{$data->permalink}\" class=\"wc-block-grid__product-link\">
+        {$data->image}
+        {$data->title}
+    </a>
+    {$data->badge}
+    {$data->price}
+    {$data->rating}
+    $button
+</li>";
     }
 
     public function replace_quantity_field() {
@@ -891,17 +935,18 @@ $('form.cart').on('submit', function() {
             $code = $sell_by['code'];
             if ($decimal > 0) {
                 $min = number_format(1 / (10 ** $decimal), $decimal);
-                $repeated_snippet = /** @lang JavaScript */ "let val = parseInt($('input[name=\"cart[$cart_item_key][qty]\"]').prop('value')) / Math.pow(10, ${decimal});
-$('input[name=\"cart[$cart_item_key][qty]\"]').prop('min', '$min').prop('value', val).prop('step', '$min')
-.prop('inputmode', 'decimal').attr('inputmode', 'decimal').addClass('$cart_item_key').prop('name', '').attr('name', '')
-.on('keypress', function(e) {
+                $repeated_snippet = /** @lang JavaScript */ "
+$('input[name=\"cart[$cart_item_key][qty]\"]').prop('min', '$min').prop('value',
+    parseInt($('input[name=\"cart[$cart_item_key][qty]\"]').prop('value')) / Math.pow(10, ${decimal})
+).prop('step', '$min').prop('inputmode', 'decimal').attr('inputmode', 'decimal').addClass('item-$cart_item_key')
+.prop('name', '').attr('name', '').on('keypress', function(e) {
     if(e.which == 13) {
         $(this).blur();
         $('button[name=update_cart]').click();
     }
 }).after('&nbsp;$code').after('<input type=\"hidden\" name=\"cart[$cart_item_key][qty]\" value=\"\">');
 $('form.woocommerce-cart-form').on('submit', function() {
-    let decVal = parseFloat(document.querySelector('input.$cart_item_key').value);
+    let decVal = parseFloat(document.querySelector('input.item-$cart_item_key').value);
     document.querySelector('input[name=\"cart[$cart_item_key][qty]\"]').value = decVal * Math.pow(10, ${decimal});
 });";
             } else {
