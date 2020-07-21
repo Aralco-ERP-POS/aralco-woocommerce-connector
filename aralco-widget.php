@@ -113,6 +113,7 @@ class List_Groupings_For_Department_Widget extends WP_Widget{
                     foreach($the_terms as $the_term) {
                         $options[$the_term->slug] = $the_term->name;
                     }
+                    ksort($options);
                     if($options > 1) {
                         $value = array();
                         if (isset($_GET[$filter_name]) && $filter != 'product_cat'){
@@ -193,7 +194,6 @@ if($("#s").val()){
 $(document).on("change.select2", "#product_cat", function() {
     $(".attr_filter, .please-wait").remove();
     if($(this).val().length <= 0 || $(this).val().indexOf("department") < 0) return;
-    console.log("test");
     $("#product_cat_field").after("<p class=\'please-wait\' style=\'font-size:2em;\'>Please Wait...</p>");
     $.get("' . get_rest_url() . /** @lang JavaScript */'aralco-wc/v1/widget/filters/" + $(this).val(), function(data, status) {
     $(".please-wait").remove();
@@ -204,9 +204,10 @@ $(document).on("change.select2", "#product_cat", function() {
                 fields += "<p id=\'" + fieldId + "_field\' class=\'form-row wps-drop js-use-select2 attr_filter\' data-priority=\'\'>" +
                 "<label for=\'" + fieldId + "\' class=\'\'>" + data[fieldId].label + "</label><span class=\'woocommerce-input-wrapper\'>" +
                 "<select name=\'" + fieldId + "\' id=\'" + fieldId + "\' class=\'select \' data-allow_clear=\'true\' data-placeholder=\'Any\' multiple>";
-                for (let optionId in data[fieldId].options){
-                    if(data[fieldId].options.hasOwnProperty(optionId)){
-                        fields += "<option value=\'" + optionId + "\'>" + data[fieldId].options[optionId] + "</option>";
+                let keys = Object.keys(data[fieldId].options).sort();
+                for (let i in keys){
+                    if(data[fieldId].options.hasOwnProperty(keys[i])){
+                        fields += "<option value=\'" + keys[i] + "\'>" + data[fieldId].options[keys[i]] + "</option>";
                     }
                 }
                 fields += "</select></span></p>";
