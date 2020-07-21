@@ -1159,29 +1159,37 @@ class Aralco_Processing_Helper {
             $aralco_order['Remarks'] = $customer_note;
         }
 
-        $subTotal = 0.0;
         /**
          * @var $item WC_Order_Item_Product
          */
         foreach ($order->get_items() as $item){
             $product = $item->get_product();
-            $price = round(floatval($item->get_subtotal()) / floatval($item->get_quantity()), 2);
+            $quantity = $item->get_quantity();
+            $price = floatval($item->get_subtotal()) / floatval($item->get_quantity());
+
+            $sell_by = get_post_meta($product->get_id(), '_aralco_sell_by', true);
+            $precision = 2;
+            if(is_array($sell_by)) {
+                echo 'is-array,';
+                $decimals = (is_numeric($sell_by['decimals']))? $sell_by['decimals'] : 0;
+                if ($decimals > 0) {
+                    echo 'is-gt-0,';
+                    echo 'dec: ' . $decimals . ',';
+                    echo 'qty: ' . $quantity . ',';
+//                    $quantity = $quantity / (10 ** $decimals);
+//                    $price = $price * (10 ** $decimals);
+                    $precision += $decimals;
+                    echo 'qty-aft: ' . $quantity;
+                }
+            }
+
+            $price = round($price, $precision);
             $grids = get_post_meta($item->get_variation_id(), '_aralco_grids', true);
             $aralco_product_id = get_post_meta($product->get_id(), '_aralco_id', true);
             if($aralco_product_id == false) {
                 $aralco_product_id = get_post_meta($product->get_parent_id(), '_aralco_id', true);
             }
 
-            $quantity = $item->get_quantity();
-
-            $sell_by = get_post_meta($product->get_id(), '_aralco_sell_by', true);
-            $unit = (is_array($sell_by))? ' ' . $sell_by['code'] . ' ' : '';
-            if(is_array($unit)) {
-                $decimals = (is_array($sell_by) && is_numeric($sell_by['decimals']))? $sell_by['decimals'] : 0;
-                if ($decimals > 0) {
-                    $quantity = $quantity / (10 ** $decimals);
-                }
-            }
 
             // TODO: Remove this. Aralco API only accepts int for quantity?
             if ($quantity < 1) $quantity = 1;
@@ -1202,9 +1210,7 @@ class Aralco_Processing_Helper {
                 'dimensionId2' => (is_array($grids) && isset($grids['dimensionId2']) && !empty($grids['dimensionId2'])) ? $grids['dimensionId2'] : null,
                 'dimensionId3' => (is_array($grids) && isset($grids['dimensionId3']) && !empty($grids['dimensionId3'])) ? $grids['dimensionId3'] : null,
                 'dimensionId4' => (is_array($grids) && isset($grids['dimensionId4']) && !empty($grids['dimensionId4'])) ? $grids['dimensionId4'] : null
-//                'remark'       => ''
             ));
-            $subTotal += $price;
         }
 
         if (isset($just_return) && $just_return) return $aralco_order;

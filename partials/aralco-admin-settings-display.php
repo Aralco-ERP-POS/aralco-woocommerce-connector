@@ -12,6 +12,10 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js" integrity="sha256-KM512VNnjElC30ehFwehXjx1YCHPiQkOPmqnrWtpccM=" crossorigin="anonymous"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.css" integrity="sha256-rByPlHULObEjJ6XQxW/flG2r+22R5dKiAoef+aXWfik=" crossorigin="anonymous" />
 <style>
+    pre {
+        border: 1px solid #000;
+        padding: 1em
+    }
     .<?php echo ARALCO_SLUG ?>_row input {
         min-width: 300px;
     }
@@ -19,9 +23,14 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
         .aralco-columns {
             display: flex;
             justify-content: space-between;
+            flex-wrap: wrap;
         }
         .aralco-columns > * {
-            width: 32%;
+            flex-basis: 49%;
+            width: 49%;
+        }
+        .aralco-columns h2 {
+            text-align: center;
         }
     }
     .aralco-columns label {
@@ -125,6 +134,17 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
             collapsible: true
         })
     </script>
+    <?php if (isset($_POST['get-order-json']) && isset($_POST['order-id'])) { ?>
+    <h1>Order JSON</h1>
+    <pre><?php
+        $order = Aralco_Processing_Helper::process_order(intval($_POST['order-id']), true);
+        if($order instanceof WP_Error) {
+            echo $order->get_error_message();
+        } else {
+            echo json_encode($order, JSON_PRETTY_PRINT);
+        }
+    ?></pre>
+    <?php } ?>
     <h1>Tools</h1>
     <div class="aralco-columns form-requires-load-blur">
     <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post">
@@ -132,6 +152,36 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
         <p>Remember to save you settings before testing the connection. Selecting "Test Connection" uses the saved configuration.</p>
         <input type="hidden" name="test-connection" value="1">
         <?php submit_button('Test Connection'); ?>
+    </form>
+    <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post">
+        <h2>Get Order JSON (DEBUG)</h2>
+        <p>Used to get the json data for a specific order. Only the last 20 are shown. Debug tool. May be removed in the future.</p>
+        <input type="hidden" name="get-order-json" value="1">
+        <label>Order
+        <select name="order-id">
+            <?php
+            try {
+                $orders = (new WC_Order_Query(array(
+                    'limit' => 20,
+                    'orderby' => 'date',
+                    'order' => 'DESC',
+                    'return' => 'objects'
+                )))->get_orders();
+                if(is_array($orders) && count($orders) > 0) {
+                    /** @var Automattic\WooCommerce\Admin\Overrides\Order $order */
+                    foreach ($orders as $i => $order) { ?>
+            <option value="<?php echo $order->get_id() ?>"<?php echo ($i == 0)? ' selected="selected"' : ''; ?>>#<?php echo $order->get_id() . ' - ' . $order->get_billing_first_name() . ' ' .
+                    $order->get_billing_last_name() . ', ' . strip_tags(WC_Price($order->get_total())); ?></option>
+                    <?php }
+                } else { ?>
+            <option value="-1">No Orders Found</option>
+                <?php }
+            } catch (Exception $e) { ?>
+            <option value="-1">No Orders Found</option>
+            <?php } ?>
+        </select>
+        </label>
+        <?php submit_button('Get JSON'); ?>
     </form>
     <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post">
         <h2>Sync Now</h2>

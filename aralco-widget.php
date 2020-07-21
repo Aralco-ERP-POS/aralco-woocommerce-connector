@@ -10,6 +10,9 @@ class List_Groupings_For_Department_Widget extends WP_Widget{
         add_action('widgets_init', function(){
             register_widget( 'List_Groupings_For_Department_Widget');
         });
+        add_action('wp_enqueue_scripts', function(){
+            wp_enqueue_style('dashicons');
+        });
     }
 
     public $args = [
@@ -49,7 +52,7 @@ class List_Groupings_For_Department_Widget extends WP_Widget{
             $title = (isset($instance['title']) && !empty($instance['title']))? $instance['title'] :
                 __('Product Search', ARALCO_SLUG);
             $subtitle = (isset($instance['subtitle']) && !empty($instance['subtitle']))? $instance['subtitle'] :
-                __('Product Filters', ARALCO_SLUG);
+                __('Advanced Search', ARALCO_SLUG);
             global $wp;
             echo $args['before_widget'] . $args['before_title'] . apply_filters('widget_title', $title) .
                 $args['after_title'] . '<div class="list-groupings-for-department-widget">' .
@@ -72,22 +75,21 @@ class List_Groupings_For_Department_Widget extends WP_Widget{
                 $s = sanitize_text_field($_GET['s']);
             }
             echo '<p class="form-row wps-drop">
-<label for="s">Keyword</label>
-<input type="text" id="s" name="s" value="' . $s . '" placeholder="Search&hellip;" style="width:100%">
-</p>
-<p class="flex-filter-buttons mobile-only">
-<button class="button reset">Clear</button>
-<button class="button" type="submit">Show Results</button>
-</p>' .
-                $args['before_title'] . apply_filters('widget_subtitle', $subtitle) . $args['after_title'] .
-'<p class="form-row wps-drop">
-<label for="min_price, max_price">Price</label>
-<div class="flex-filter-buttons">
-<input type="number" id="min_price" name="min_price" value="' . $min_price . '" placeholder="Min" style="width:45%">
-<div style="width: 10%; font-size: 2em; text-align: center">-</div>
-<input type="number" id="max_price" name="max_price" value="' . $max_price . '" placeholder="Max" style="width:45%">
-</div>
-</p>';
+<label for="s" class="screen-reader-text">Keyword</label>
+<span class="group">
+<span class="input">
+    <input type="text" id="s" name="s" value="' . $s . '" placeholder="Product Name, Code, Text Search&hellip;" style="width:100%">
+    <button id="clear-search-field" type="button" style="display: none;">
+        <span class="dashicons dashicons-no-alt" aria-hidden="true"></span>
+        <span class="screen-reader-text">Clear Field</span>
+    </button>
+</span>
+<button type="submit">
+    <span class="dashicons dashicons-search" aria-hidden="true"></span>
+    <span class="screen-reader-text">Show Results</span>
+</button>
+</span>
+</p><span class="gamma widget-title widget-subtitle">' . apply_filters('widget_subtitle', $subtitle) . '</span>';
 
             foreach($filters as $filter){
                 if($filter != 'product_cat'){
@@ -144,10 +146,19 @@ class List_Groupings_For_Department_Widget extends WP_Widget{
                     }
                 }
             }
-            echo '<div class="flex-filter-buttons">
+            echo '<p class="form-row wps-drop">
+<label for="min_price, max_price">Price</label>
+<span class="flex-filter-buttons">
+<input type="number" id="min_price" name="min_price" value="' . $min_price . '" placeholder="Min" style="width:45%">
+<span style="width: 10%; font-size: 2em; text-align: center; font-weight: bold;">-</span>
+<input type="number" id="max_price" name="max_price" value="' . $max_price . '" placeholder="Max" style="width:45%">
+</span>
+</p>
+<div class="flex-filter-buttons">
 <button class="button reset">Clear</button>
 <button class="button" type="submit">Show Results</button>
 </div></form></div>' . $args['after_widget'];
+            /** @noinspection JSJQueryEfficiency */
             wc_enqueue_js('
 $("#s, #min_price, #max_price").on("keydown", function(e){
     if (13 === e.which) {
@@ -164,6 +175,21 @@ $(".button.reset").on("click", function(e){
     $("#s").val(null);
     $(".js-use-select2 select").val(null).trigger("change");
 });
+$("#s").on("input", function(){
+    if($(this).val()) {
+        $("#clear-search-field").show();
+    } else {
+        $("#clear-search-field").hide();
+    }
+});
+$("#clear-search-field").on("click", function(e){
+    e.preventDefault();
+    $("#s").val(null);
+    $(this).hide();
+});
+if($("#s").val()){
+    $("#clear-search-field").show();
+}
 $(document).on("change.select2", "#product_cat", function() {
     $(".attr_filter, .please-wait").remove();
     if($(this).val().length <= 0 || $(this).val().indexOf("department") < 0) return;
@@ -228,6 +254,42 @@ if (($(document.body).hasClass("search") || $(document.body).hasClass("archive")
                 '<div class="list-groupings-for-department-widget">WooCommerce is required for this widget to function</div>' .
                 $args['after_widget'];
         }
+        echo '<style>
+.widget.widget_list-groupings-for-department p {
+    margin-bottom: 0.75rem;
+}
+.widget.widget_list-groupings-for-department .group {
+    display: flex;
+    flex-direction: row;
+}
+.widget.widget_list-groupings-for-department .group .input {
+    flex-grow: 1;
+    position: relative;
+}
+#clear-search-field {
+    background: transparent;
+    position: absolute;
+    right: 0;
+    top: 0;
+}
+#clear-search-field:hover, #clear-search-field:active {
+    background: rgba(0,0,0, 0.1);
+}
+.widget.widget_list-groupings-for-department .group button {
+    flex-grow: 0;
+    padding: 0.6180469716em 0.6180469716em;
+}
+@media screen and (max-width: 767px) {
+    .gamma.widget-title {
+        text-align: center;
+    }
+}
+.gamma.widget-subtitle {
+    border: none;
+    padding-bottom: 0;
+    margin-bottom: 0.5em;
+}
+</style>';
     }
 
     public function form($instance) {
