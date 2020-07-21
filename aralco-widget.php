@@ -173,8 +173,9 @@ $(".js-use-select2 select").select2({
 });
 $(".button.reset").on("click", function(e){
     e.preventDefault();
-    $("#s").val(null);
+    $("#s, #min_price, #max_price").val(null);
     $(".js-use-select2 select").val(null).trigger("change");
+    $("#clear-search-field").hide();
 });
 $("#s").on("input", function(){
     if($(this).val()) {
@@ -256,6 +257,11 @@ if (($(document.body).hasClass("search") || $(document.body).hasClass("archive")
                 $args['after_widget'];
         }
         echo '<style>
+.widget.widget_list-groupings-for-department input,
+.widget.widget_list-groupings-for-department .select2-selection__rendered,
+.widget.widget_list-groupings-for-department .select2-selection__choice {
+    font-weight: bold;
+}
 .widget.widget_list-groupings-for-department p {
     margin-bottom: 0.75rem;
 }
