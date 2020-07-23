@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.11.6
+ * Version: 1.11.7
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.11.6
+ * @version 1.11.7
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -1095,6 +1095,9 @@ $repeated_snippet
         global $current_aralco_user;
 
         $group_prices = get_post_meta($product_id, '_group_prices', true);
+        if (!is_array($group_prices)){
+            $group_prices = get_post_meta(wc_get_product($product_id)->get_parent_id(), '_group_prices', true);
+        }
         if (is_array($group_prices) && count($group_prices) > 0) {
             $group_price = array_values(array_filter($group_prices, function($item) use ($current_aralco_user) {
                 return $item['CustomerGroupID'] === $current_aralco_user['customerGroupID'];
