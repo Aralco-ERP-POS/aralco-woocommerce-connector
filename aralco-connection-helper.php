@@ -140,6 +140,52 @@ class Aralco_Connection_Helper {
     }
 
     /**
+     * Gets all the product to disable
+     *
+     * @return array|WP_Error
+     */
+    static function getDisabledProducts() {
+        if(!Aralco_Connection_Helper::hasValidConfig()){
+            return new WP_Error(ARALCO_SLUG . '_invalid_config', 'You must save the connection settings before you can test them.');
+        }
+
+        $options = get_option(ARALCO_SLUG . '_options');
+        $curl = curl_init();
+        curl_setopt($curl, CURLOPT_URL, $options[ARALCO_SLUG . '_field_api_location'] .
+            'api/Product/GetDisabled');
+        curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false); // Disable SSL verification
+        curl_setopt($curl, CURLOPT_RETURNTRANSFER, true); // Return instead of printing
+        curl_setopt($curl, CURLOPT_HTTPHEADER, array(
+            'Authorization: Basic ' . $options[ARALCO_SLUG . '_field_api_token']
+        )); // Basic Auth
+        $data = curl_exec($curl); // Get cURL result body
+        $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        curl_close($curl); // Close the cURL handler
+
+        if($http_code == 200){
+            return json_decode($data, true); // Retrieval Successful.
+        }
+
+        $message = "Unknown Error";
+        if(isset($data)){
+            if(strpos($data, '{') !== false){
+                $data = json_decode($data, true);
+                $message = $data['message'] . ' ';
+                if(isset($data['exceptionMessage'])){
+                    $message .= $data['exceptionMessage'];
+                }
+            }else{
+                $message = $data;
+            }
+        }
+
+        return new WP_Error(
+            ARALCO_SLUG . '_get_disabled_product_error',
+            __('Product Fetch 2 Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG)
+        );
+    }
+
+    /**
      * Gets all the product grids/variants for a product
      *
      * @param int $productId the product to find grids for

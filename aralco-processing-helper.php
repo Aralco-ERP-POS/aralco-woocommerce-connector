@@ -55,6 +55,25 @@ class Aralco_Processing_Helper {
             $lastSync = $temp->format('Y-m-d\TH:i:s');
         }
 
+        $result = Aralco_Connection_Helper::getDisabledProducts();
+
+        if(is_array($result) && count($result)){ // Got Data
+            global $wpdb;
+            $products = $wpdb->get_results("SELECT post_id, meta_value FROM $wpdb->postmeta WHERE meta_key = '_aralco_id'");
+            if(is_array($products) && count($products) > 0){
+                $list = array();
+                foreach ($products as $i => $product){
+                    if(in_array($product->meta_value, $result)){
+                        $list[] = $product->post_id;
+                    }
+                }
+                if(count($list) > 0){
+                    $list = implode(',', $list);
+                    $wpdb->query("UPDATE $wpdb->posts SET post_status = 'private' WHERE ID IN ($list)");
+                }
+            }
+        } else if ($result instanceof WP_Error) return $result;
+
         $result = Aralco_Connection_Helper::getProducts($lastSync);
 
         if(is_array($result)){ // Got Data
@@ -191,6 +210,9 @@ class Aralco_Processing_Helper {
                 delete_transient( 'wc_product_children_' . $post_id );
                 delete_transient( 'wc_var_prices_' . $post_id );
             }
+        } else if (!$is_new && $results[0]->post_status != 'publish') {
+            $post = array('ID' => $post_id, 'post_status' => 'publish');
+            wp_update_post($post);
         }
 
         /**
