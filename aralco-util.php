@@ -54,4 +54,35 @@ class Aralco_Util {
             )
         );
     }
+
+    /**
+     * Convert a flat relational array to a nested tree array
+     *
+     * @param array $flat the flat array to convert
+     * @param string $idField the id to check the children against
+     * @param string $parentIdField the parent id to find
+     * @param string $childNodesField the field to stuff child nodes into in the parent
+     * @return array the tree array
+     */
+    static function convertToTree(array $flat, $idField = 'id', $parentIdField = 'parent', $childNodesField = 'children') {
+        $indexed = array();
+        // first pass - get the array indexed by the primary id
+        foreach ($flat as $row) {
+            $indexed[$row[$idField]] = $row;
+            $indexed[$row[$idField]][$childNodesField] = array();
+        }
+
+        //second pass
+        $to_return = array();
+        foreach ($indexed as $id => $row) {
+            if($row[$parentIdField] !== null) {
+                $indexed[$row[$parentIdField]][$childNodesField][$id] =& $indexed[$id];
+            } else {
+                $to_return[] =& $indexed[$row[$idField]];
+            }
+        }
+
+        return $to_return;
+    }
+
 }

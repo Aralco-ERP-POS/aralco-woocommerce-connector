@@ -846,10 +846,14 @@ class Aralco_Processing_Helper {
                 $term_id = $result['term_id'];
             } else {
                 // exists so lets update it
-                $result = wp_update_term($term->term_id, 'product_cat', array(
+                $args = array(
                     'description' => isset($department['Description']) ? $department['Description'] : '',
                     'slug' => $slug
-                ));
+                );
+                if(!isset($department['ParentId']) && $department !== 0){
+                    $args['parent'] = 0; // to clear parent if parent has been removed
+                }
+                $result = wp_update_term($term->term_id, 'product_cat', $args);
                 if ($result instanceof WP_Error) return $result;
                 $term_id = $term->term_id;
             }

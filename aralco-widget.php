@@ -1,4 +1,6 @@
 <?php
+require_once 'aralco-util.php';
+
 class List_Groupings_For_Department_Widget extends WP_Widget{
 
     function __construct(){
@@ -51,9 +53,8 @@ class List_Groupings_For_Department_Widget extends WP_Widget{
 
             $title = (isset($instance['title']) && !empty($instance['title']))? $instance['title'] :
                 __('Product Search', ARALCO_SLUG);
-            $subtitle = (isset($instance['subtitle']) && !empty($instance['subtitle']))? $instance['subtitle'] :
-                __('Advanced Search', ARALCO_SLUG);
-            global $wp;
+//            $subtitle = (isset($instance['subtitle']) && !empty($instance['subtitle']))? $instance['subtitle'] :
+//                __('Advanced Search', ARALCO_SLUG);
             echo $args['before_widget'] . $args['before_title'] . apply_filters('widget_title', $title) .
                 $args['after_title'] . '<div class="list-groupings-for-department-widget">' .
                 '<form id="product-filter-form" class="woocommerce-widget-layered-nav-dropdown" method="get" action="' .
@@ -89,7 +90,11 @@ class List_Groupings_For_Department_Widget extends WP_Widget{
     <span class="screen-reader-text">Show Results</span>
 </button>
 </span>
-</p><span class="gamma widget-title widget-subtitle">' . apply_filters('widget_subtitle', $subtitle) . '</span>';
+<div class="flex-filter-buttons mobile-only" aria-hidden="true">
+<button class="button reset">Clear</button>
+<button class="button" type="submit">Show Results</button>
+</div>
+</p>'; //<span class="gamma widget-title widget-subtitle">' . apply_filters('widget_subtitle', $subtitle) . '</span>';
 
             foreach($filters as $filter){
                 if($filter != 'product_cat'){
@@ -104,23 +109,44 @@ class List_Groupings_For_Department_Widget extends WP_Widget{
                  */
                 $the_taxonomy = get_taxonomy($attr_filter);
                 $the_terms = get_terms(array(
+//                    'hide_empty' => false,
                     'taxonomy' => $attr_filter
-                    /*, 'hide_empty' => false*/
                 ));
                 $options = array();
                 if ($the_taxonomy instanceof WP_Taxonomy && !($the_terms instanceof WP_Error)) {
-                    $options[''] = __('Any', ARALCO_SLUG);
                     foreach($the_terms as $the_term) {
-                        $options[$the_term->slug] = $the_term->name;
+                        array_push($options, array(
+                            'id' => $the_term->term_id,
+                            'parent' => (is_numeric($the_term->parent) && $the_term->parent > 0) ? $the_term->parent : null,
+                            'slug' => $the_term->slug,
+                            'text' => $the_term->name
+                        ));
                     }
-                    ksort($options);
-                    if($options > 1) {
+                    if($filter != 'product_cat') {
+                        usort($options, function($a, $b) {
+                            return strcmp($a['slug'], $b['slug']);
+                        });
+                    } else {
+                        usort($options, function($a, $b) {
+                            return strcmp($a['text'], $b['text']);
+                        });
+                        $options = array_values(Aralco_Util::convertToTree($options));
+                    }
+                    array_unshift($options, array(
+                        'id' => '',
+                        'parent' => '',
+                        'slug' => '',
+                        'text' => __('Any', ARALCO_SLUG)
+                    ));
+                    $options = array_values($options);
+
+                    if(count($options) > 0) {
                         $value = array();
                         if (isset($_GET[$filter_name]) && $filter != 'product_cat'){
-                            foreach($options as $slug => $name) {
+                            foreach($options as $i => $option) {
                                 $get_array = explode(',', $_GET[$filter_name]);
-                                if(in_array($slug, $get_array)){
-                                    array_push($value, $slug);
+                                if(in_array($option['slug'], $get_array)){
+                                    array_push($value, $option['slug']);
                                 }
                             }
                         } else if(isset($cat) && $cat instanceof WP_Term && $filter == 'product_cat') {
@@ -143,6 +169,7 @@ class List_Groupings_For_Department_Widget extends WP_Widget{
                             'label' => $the_taxonomy->label,
                             'options' => $options,
                             'multiple' => $multiple,
+                            'placeholder' => 'Any'
                         ), $value);
                     }
                 }
@@ -161,6 +188,11 @@ class List_Groupings_For_Department_Widget extends WP_Widget{
 </div></form></div>' . $args['after_widget'];
             /** @noinspection JSJQueryEfficiency */
             wc_enqueue_js('
+function select2TemplateResult (data) {
+    if (!data.element) return data.text;
+    let indent = (($(data.element)[0].className.split("-")[1]) - 1) + "em";
+    return $("<span></span>").css("padding-left", indent).text(data.text);
+}
 $("#s, #min_price, #max_price").on("keydown", function(e){
     if (13 === e.which) {
         e.preventDefault();
@@ -168,6 +200,7 @@ $("#s, #min_price, #max_price").on("keydown", function(e){
     }
 });
 $(".js-use-select2 select").select2({
+    templateResult: select2TemplateResult,
     placeholder: "Any",
     width: "100%"
 });
@@ -217,6 +250,7 @@ $(document).on("change.select2", "#product_cat", function() {
         if(fields.length > 0){
             $("#product_cat_field").after(fields);
             $(".js-use-select2.attr_filter select").select2({
+                templateResult: select2TemplateResult,
                 placeholder: "Any",
                 width: "100%"
             });
@@ -285,6 +319,11 @@ if (($(document.body).hasClass("search") || $(document.body).hasClass("archive")
 .widget.widget_list-groupings-for-department .group button {
     flex-grow: 0;
     padding: 0.6180469716em 0.6180469716em;
+}
+@media screen and (min-width: 768px) {
+    .mobile-only {
+        display: none;
+    }
 }
 @media screen and (max-width: 767px) {
     .gamma.widget-title {

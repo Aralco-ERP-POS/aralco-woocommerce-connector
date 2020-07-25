@@ -103,9 +103,9 @@ function aralco_admin_settings_checkbox($options, $args){
  *
  * Outputs a checkout/address form field.
  *
- * @param string $key Key.
- * @param mixed  $args Arguments.
- * @param string $value (default: null).
+ * @param string        $key Key.
+ * @param mixed         $args Arguments.
+ * @param string|array  $value (default: null).
  * @return string
  */
 function aralco_form_field($key, $args, $value = null) {
@@ -242,21 +242,9 @@ function aralco_form_field($key, $args, $value = null) {
             break;
         case 'select':
             $field = '';
-            $options = '';
 
             if (!empty($args['options'])) {
-                foreach ($args['options'] as $option_key => $option_text) {
-                    if ('' === $option_key) {
-                        // If we have a blank option, select2 needs a placeholder.
-                        if (empty($args['placeholder'])) {
-                            $args['placeholder'] = $option_text? $option_text : __('Choose an option', 'woocommerce');
-                        }
-                        $custom_attributes[] = 'data-allow_clear="true"';
-                    }
-                    $selected = ($args['multiple'] == true)? (in_array($option_key, $value))? selected($option_key, $option_key, false) : '' : selected($value, $option_key, false);
-
-                    $options .= '<option value="' . esc_attr($option_key) . '" ' . $selected . '>' . esc_attr($option_text) . '</option>';
-                }
+                $options = aralco_form_field_option($args, $value);
                 if($args['multiple'] == true) {
                     $custom_attributes[] = 'multiple';
                 }
@@ -317,4 +305,28 @@ function aralco_form_field($key, $args, $value = null) {
     } else {
         echo $field; // WPCS: XSS ok.
     }
+}
+
+function aralco_form_field_option($args, $value, $level = 1) {
+    $options = '';
+    foreach ($args['options'] as $option_key => $option) {
+        if ('' === $option['slug']) {
+            // If we have a blank option, select2 needs a placeholder.
+            if (empty($args['placeholder'])) {
+                $args['placeholder'] = $option['text']? $option['text'] : __('Choose an option', 'woocommerce');
+            }
+            $custom_attributes[] = 'data-allow_clear="true"';
+        }
+        $selected = ($args['multiple'] == true)? (in_array($option['slug'], $value))? selected($option['slug'], $option['slug'], false) : '' : selected($value, $option['slug'], false);
+
+        $classes = ' class="level-' . $level . '"';
+
+        $options .= '<option value="' . esc_attr($option['slug']) . '" ' . $selected . $classes .'>' . esc_attr($option['text']) . '</option>';
+
+        if (isset($option['children']) && is_array($option['children']) && count($option['children']) > 0 && $level <= 100){ // capped at 100 just in case
+            $args['options'] = $option['children'];
+            $options .= aralco_form_field_option($args, $value, $level + 1);
+        }
+    }
+    return $options;
 }
