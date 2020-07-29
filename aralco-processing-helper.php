@@ -1177,7 +1177,8 @@ class Aralco_Processing_Helper {
                 'provinceState' => $order->get_billing_state(),
                 'country'       => $order->get_billing_country(),
                 'zipPostalCode' => $order->get_billing_postcode()
-            )
+            ),
+            'UoMDivideByDecimal' => true
         );
 
         $customer_note = $order->get_customer_note();
@@ -1196,16 +1197,11 @@ class Aralco_Processing_Helper {
             $sell_by = get_post_meta($product->get_id(), '_aralco_sell_by', true);
             $precision = 2;
             if(is_array($sell_by)) {
-                echo 'is-array,';
                 $decimals = (is_numeric($sell_by['decimals']))? $sell_by['decimals'] : 0;
                 if ($decimals > 0) {
-                    echo 'is-gt-0,';
-                    echo 'dec: ' . $decimals . ',';
-                    echo 'qty: ' . $quantity . ',';
 //                    $quantity = $quantity / (10 ** $decimals);
 //                    $price = $price * (10 ** $decimals);
                     $precision += $decimals;
-                    echo 'qty-aft: ' . $quantity;
                 }
             }
 

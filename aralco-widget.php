@@ -90,7 +90,7 @@ class List_Groupings_For_Department_Widget extends WP_Widget{
     <span class="screen-reader-text">Show Results</span>
 </button>
 </span>
-<div class="flex-filter-buttons mobile-only" aria-hidden="true">
+<div class="flex-filter-buttons" aria-hidden="true">
 <button class="button reset">Clear</button>
 <button class="button" type="submit">Show Results</button>
 </div>
