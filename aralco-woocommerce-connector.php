@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.12.1
+ * Version: 1.12.2
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.12.1
+ * @version 1.12.2
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -72,7 +72,6 @@ class Aralco_WooCommerce_Connector {
             add_action('admin_init', array($this, 'register_product_taxonomy'));
 
             // register customer group price and UoM hooks
-
             add_filter('woocommerce_get_price_html', array($this, 'alter_price_display'), 100, 2);
             add_filter('woocommerce_cart_item_price', array($this, 'alter_cart_price_display'), 100, 2);
             add_filter('woocommerce_checkout_cart_item_quantity', array($this, 'alter_cart_quantity_display'), 100, 3);
@@ -90,6 +89,9 @@ class Aralco_WooCommerce_Connector {
             add_filter('woocommerce_email_order_item_quantity', array($this, 'order_item_quantity_html'), 100, 2);
             add_filter('woocommerce_display_item_meta', array($this, 'display_item_meta'), 100, 3);
             add_filter('woocommerce_email', array($this, 'email'), 100);
+
+            // register aralco id field display (for admins)
+            add_action('woocommerce_product_meta_start', array($this, 'display_aralco_id'), 101, 0);
         } else {
             // Show admin notice that WooCommerce needs to be active.
             add_action('admin_notices', array($this, 'plugin_not_available'));
@@ -1072,6 +1074,22 @@ $repeated_snippet
         }
 
         return $html;
+    }
+
+    /**
+     * Displays aralco ID for admins
+     */
+    public function display_aralco_id() {
+        if(current_user_can('administrator')) {
+            $id = get_post_meta(get_the_ID(), '_aralco_id', true);
+            if ($id == false) {
+                $id = get_post_meta(wp_get_post_parent_id(get_the_ID()), '_aralco_id', true);
+            }
+            if ($id == false) {
+                $id = 'Unknown';
+            }
+            echo '<span class="aralco_id_wrapper">Aralco ID: <span class="aralco_id">' . $id . '</span></span>';
+        }
     }
 
     /**
