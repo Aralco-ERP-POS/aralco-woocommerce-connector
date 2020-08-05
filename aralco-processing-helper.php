@@ -619,6 +619,20 @@ class Aralco_Processing_Helper {
             $start_time = new DateTime();
         } catch(Exception $e) {}
 
+        $server_time = Aralco_Connection_Helper::getServerTime();
+        if($server_time instanceof WP_Error){
+            return $server_time;
+        } else if (is_array($server_time) && isset($server_time['UtcOffset'])) {
+            $sign = ($server_time['UtcOffset'] > 0) ? '+' : '-';
+            $server_time['UtcOffset'] -= 60; // Adds an extra hour to the sync to adjust for server de-syncs
+            if ($server_time['UtcOffset'] < 0) {
+                $server_time['UtcOffset'] = $server_time['UtcOffset'] * -1;
+            }
+            $temp = DateTime::createFromFormat('Y-m-d\TH:i:s', $lastSync);
+            $temp->modify($sign . $server_time['UtcOffset'] . ' minutes');
+            $lastSync = $temp->format('Y-m-d\TH:i:s');
+        }
+
         $inventory = Aralco_Connection_Helper::getProductStock($lastSync);
         if($inventory instanceof WP_Error) return $inventory;
 
