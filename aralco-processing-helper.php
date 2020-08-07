@@ -230,7 +230,7 @@ class Aralco_Processing_Helper {
                 $product->set_downloadable(false);
                 $product->set_virtual(false);
                 $product->set_manage_stock(false);
-                $product->set_backorders('notify');
+                $product->set_backorders('no');
             }
         }
 
@@ -572,8 +572,8 @@ class Aralco_Processing_Helper {
             $variation->set_regular_price($aralco_product['Product']['Price']);
 
             // Stock
-            $variation->set_manage_stock(true);
-            $variation->set_backorders('notify');
+            $variation->set_manage_stock(false);
+            $variation->set_backorders('no');
             $variation->set_stock_status('');
 
             if(isset($aralco_product['Product']['WebProperties']['Weight'])){
@@ -605,40 +605,50 @@ class Aralco_Processing_Helper {
     /**
      * Syncs the product inventory
      *
+     * @param null|WC_Product[] $products the products to update. if null, all products based on last sync date
      * @param bool $everything if to ignore
      * @return bool|WP_Error true if the inventory sync succeeded, otherwise an instance of WP_Error
      */
-    static function sync_stock($everything = false){
-        if ($everything) set_time_limit(0);
-        $lastSync = get_option(ARALCO_SLUG . '_last_sync');
-        if(!isset($lastSync) || $lastSync === false || $everything){
-            $lastSync = date("Y-m-d\TH:i:s", mktime(0, 0, 0, 1, 1, 1900));
-        }
-
-        try{
-            $start_time = new DateTime();
-        } catch(Exception $e) {}
-
-        $server_time = Aralco_Connection_Helper::getServerTime();
-        if($server_time instanceof WP_Error){
-            return $server_time;
-        } else if (is_array($server_time) && isset($server_time['UtcOffset'])) {
-            $sign = ($server_time['UtcOffset'] > 0) ? '+' : '-';
-            $server_time['UtcOffset'] -= 60; // Adds an extra hour to the sync to adjust for server de-syncs
-            if ($server_time['UtcOffset'] < 0) {
-                $server_time['UtcOffset'] = $server_time['UtcOffset'] * -1;
+    static function sync_stock($products = null, $everything = false){
+        if(is_array($products) && count($products) > 0) {
+            $inventory = Aralco_Connection_Helper::getProductStockByIDs($products);
+        } else {
+            if ($everything) set_time_limit(0);
+            $lastSync = get_option(ARALCO_SLUG . '_last_sync');
+            if(!isset($lastSync) || $lastSync === false || $everything){
+                $lastSync = date("Y-m-d\TH:i:s", mktime(0, 0, 0, 1, 1, 1900));
             }
-            $temp = DateTime::createFromFormat('Y-m-d\TH:i:s', $lastSync);
-            $temp->modify($sign . $server_time['UtcOffset'] . ' minutes');
-            $lastSync = $temp->format('Y-m-d\TH:i:s');
-        }
 
-        $inventory = Aralco_Connection_Helper::getProductStock($lastSync);
+            try{
+                $start_time = new DateTime();
+            } catch(Exception $e) {}
+
+            $server_time = Aralco_Connection_Helper::getServerTime();
+            if($server_time instanceof WP_Error){
+                return $server_time;
+            } else if (is_array($server_time) && isset($server_time['UtcOffset'])) {
+                $sign = ($server_time['UtcOffset'] > 0) ? '+' : '-';
+                $server_time['UtcOffset'] -= 60; // Adds an extra hour to the sync to adjust for server de-syncs
+                if ($server_time['UtcOffset'] < 0) {
+                    $server_time['UtcOffset'] = $server_time['UtcOffset'] * -1;
+                }
+                $temp = DateTime::createFromFormat('Y-m-d\TH:i:s', $lastSync);
+                $temp->modify($sign . $server_time['UtcOffset'] . ' minutes');
+                $lastSync = $temp->format('Y-m-d\TH:i:s');
+            }
+            $inventory = Aralco_Connection_Helper::getProductStock($lastSync);
+        }
         if($inventory instanceof WP_Error) return $inventory;
 
         $count = 0;
 
         $serialInventory = array();
+
+        $options = get_option(ARALCO_SLUG . '_options');
+        $backorders = ($options !== false &&
+            isset($options[ARALCO_SLUG . '_field_allow_backorders']) &&
+            $options[ARALCO_SLUG . '_field_allow_backorders'] == '1') ?
+            'notify' : 'no';
 
         foreach ($inventory as $index => $item){
             $args = array(
@@ -695,7 +705,7 @@ class Aralco_Processing_Helper {
             }
 
             update_post_meta($product_id, '_manage_stock', 'yes');
-            update_post_meta($product_id, '_backorders', 'notify');
+            update_post_meta($product_id, '_backorders', $backorders);
             update_post_meta($product_id, '_stock', $available);
             update_post_meta($product_id, '_stock_status', ($available >= 1) ? 'instock' : 'onbackorder');
             $count++;
@@ -712,19 +722,21 @@ class Aralco_Processing_Helper {
             $product_id = $results[0]->ID;
 
             update_post_meta($product_id, '_manage_stock', 'yes');
-            update_post_meta($product_id, '_backorders', 'notify');
+            update_post_meta($product_id, '_backorders', $backorders);
             update_post_meta($product_id, '_stock', $item);
             update_post_meta($product_id, '_stock_status', ($item >= 1) ? 'instock' : 'onbackorder');
             $count++;
         }
 
-        update_option(ARALCO_SLUG . '_last_sync_stock_count', $count);
+        if(!is_array($products) || count($products) <= 0) {
+            update_option(ARALCO_SLUG . '_last_sync_stock_count', $count);
 
-        try{
-            /** @noinspection PhpUndefinedVariableInspection */
-            $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
-            update_option(ARALCO_SLUG . '_last_sync_duration_stock', $time_taken);
-        } catch(Exception $e) {}
+            try{
+                /** @noinspection PhpUndefinedVariableInspection */
+                $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
+                update_option(ARALCO_SLUG . '_last_sync_duration_stock', $time_taken);
+            } catch(Exception $e) {}
+        }
         return true;
     }
 
@@ -1220,7 +1232,7 @@ class Aralco_Processing_Helper {
             }
 
             $price = round($price, $precision);
-            $grids = get_post_meta($item->get_variation_id(), '_aralco_grids', true);
+            $grids = get_post_meta($item->get_id(), '_aralco_grids', true);
             $aralco_product_id = get_post_meta($product->get_id(), '_aralco_id', true);
             if($aralco_product_id == false) {
                 $aralco_product_id = get_post_meta($product->get_parent_id(), '_aralco_id', true);

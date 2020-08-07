@@ -165,6 +165,8 @@ function aralco_validate_config($input) {
         )
     ))->is_valid($input[ARALCO_SLUG . '_field_sync_interval']) == false) $valid = false;
 
+    $input[ARALCO_SLUG . '_field_allow_backorders'] = (isset($input[ARALCO_SLUG . '_field_allow_backorders'])) ? '1' : '0';
+
     $input[ARALCO_SLUG . '_field_sync_enabled'] = (isset($input[ARALCO_SLUG . '_field_sync_enabled'])) ? '1' : '0';
 
     try{

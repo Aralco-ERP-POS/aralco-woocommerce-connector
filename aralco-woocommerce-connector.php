@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.12.3
+ * Version: 1.13.0
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.12.3
+ * @version 1.13.0
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -92,6 +92,9 @@ class Aralco_WooCommerce_Connector {
 
             // register aralco id field display (for admins)
             add_action('woocommerce_product_meta_start', array($this, 'display_aralco_id'), 101, 0);
+
+            // register stock check for cart page hook
+            add_action('woocommerce_before_cart', array($this, 'cart_check_product_stock'), 100, 0);
         } else {
             // Show admin notice that WooCommerce needs to be active.
             add_action('admin_notices', array($this, 'plugin_not_available'));
@@ -180,6 +183,18 @@ class Aralco_WooCommerce_Connector {
                 'placeholder' => '1a2b3v4d5e6f7g8h9i0j1k2l3m4n5o6p7q8r9s0t',
                 'required' => 'required',
                 'description' => 'Enter the secret barer token for your Aralco Ecommerce API'
+            ]
+        );
+
+        add_settings_field(
+            ARALCO_SLUG . '_field_allow_backorders',
+            __('Allow Backorders', ARALCO_SLUG),
+            array($this, 'field_checkbox'),
+            ARALCO_SLUG,
+            ARALCO_SLUG . '_global_section',
+            [
+                'label_for' => ARALCO_SLUG . '_field_allow_backorders',
+                'required' => 'required'
             ]
         );
 
@@ -539,7 +554,7 @@ class Aralco_WooCommerce_Connector {
             update_option(ARALCO_SLUG . '_last_sync_duration_products', 0);
         }
         if($what_to_sync['stock']) {
-            $result = Aralco_Processing_Helper::sync_stock($everything);
+            $result = Aralco_Processing_Helper::sync_stock(null, $everything);
             if($result !== true){
                 array_push($errors, $result);
             }
@@ -1146,6 +1161,39 @@ $repeated_snippet
 //        }
 
         return $normal_price;
+    }
+
+    public function cart_check_product_stock() {
+
+        $products_to_update = [];
+        $store_id = get_option(ARALCO_SLUG . '_options')[ARALCO_SLUG . '_field_store_id'];
+
+        foreach (WC()->cart->get_cart() as $cart_item_key => $cart_item) {
+            /** @var WC_Product $product_obj */
+            $product_obj = $cart_item['data'];
+            $grids = get_post_meta($product_obj->get_id(), '_aralco_grids', true);
+            $aralco_product_id = get_post_meta($product_obj->get_id(), '_aralco_id', true);
+            if($aralco_product_id == false) {
+                $aralco_product_id = get_post_meta($product_obj->get_parent_id(), '_aralco_id', true);
+            }
+            $products_to_update[] = array(
+                'ProductId' => $aralco_product_id,
+                'StoreId' => $store_id,
+                'SerialNumber' => '', //TODO: Fill in later
+                'GridId1' => (is_array($grids) && isset($grids['gridId1']) && !empty($grids['gridId1'])) ? $grids['gridId1'] : null,
+                'GridId2' => (is_array($grids) && isset($grids['gridId2']) && !empty($grids['gridId2'])) ? $grids['gridId2'] : null,
+                'GridId3' => (is_array($grids) && isset($grids['gridId3']) && !empty($grids['gridId3'])) ? $grids['gridId3'] : null,
+                'GridId4' => (is_array($grids) && isset($grids['gridId4']) && !empty($grids['gridId4'])) ? $grids['gridId4'] : null,
+            );
+        }
+
+        if(count($products_to_update) <= 0) return;
+
+        $result = Aralco_Processing_Helper::sync_stock($products_to_update);
+
+        if ($result instanceof WP_Error) {
+            wc_add_notice($result->get_error_message(), 'error');
+        }
     }
 
     /**
