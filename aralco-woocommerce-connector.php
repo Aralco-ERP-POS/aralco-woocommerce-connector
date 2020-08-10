@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.13.0
+ * Version: 1.13.1
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.13.0
+ * @version 1.13.1
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -95,6 +95,9 @@ class Aralco_WooCommerce_Connector {
 
             // register stock check for cart page hook
             add_action('woocommerce_before_cart', array($this, 'cart_check_product_stock'), 100, 0);
+
+            // disable the need for unique SKUs. Required for Aralco products.
+            add_filter('wc_product_has_unique_sku', '__return_false' );
         } else {
             // Show admin notice that WooCommerce needs to be active.
             add_action('admin_notices', array($this, 'plugin_not_available'));
