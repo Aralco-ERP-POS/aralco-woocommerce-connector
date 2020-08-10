@@ -225,12 +225,17 @@ class Aralco_Processing_Helper {
                 $product->set_catalog_visibility('visible');
             } catch(Exception $e) {}
             if(!$has_dim) {
+                $options = get_option(ARALCO_SLUG . '_options');
+                $backorders = ($options !== false &&
+                    isset($options[ARALCO_SLUG . '_field_allow_backorders']) &&
+                    $options[ARALCO_SLUG . '_field_allow_backorders'] == '1') ?
+                    'notify' : 'no';
                 $product->set_stock_status('instock');
                 $product->set_total_sales(0);
                 $product->set_downloadable(false);
                 $product->set_virtual(false);
                 $product->set_manage_stock(false);
-                $product->set_backorders('no');
+                $product->set_backorders($backorders);
             }
         }
 
@@ -493,7 +498,9 @@ class Aralco_Processing_Helper {
 
             $results = (new WP_Query($args))->get_posts();
 
-            if(count($results) <= 0) {
+            $new = count($results) > 0;
+
+            if(!$new) {
                 // Get the Variable product object (parent)
                 $product = wc_get_product($post_id);
 
@@ -525,7 +532,7 @@ class Aralco_Processing_Helper {
             }
 
             // Get an instance of the WC_Product_Variation object
-            $variation = new WC_Product_Variation( $variation_id );
+            $variation = new WC_Product_Variation($variation_id);
 
             // Iterating through the variations attributes
             foreach ($attributes as $taxonomy => $term_name){
@@ -540,17 +547,17 @@ class Aralco_Processing_Helper {
                         $term_name . '" for taxonomy "' . $taxonomy . '" does not exist.');
                 }
 
-                $term_slug = get_term_by('name', $term_name, $taxonomy )->slug; // Get the term slug
+                $term_slug = get_term_by('name', $term_name, $taxonomy)->slug; // Get the term slug
 
                 // Get the post Terms names from the parent variable product.
-                $post_term_names =  wp_get_post_terms( $post_id, $taxonomy, array('fields' => 'names') );
+                $post_term_names = wp_get_post_terms($post_id, $taxonomy, array('fields' => 'names'));
 
                 // Check if the post term exist and if not we set it in the parent variable product.
-                if( ! in_array( $term_name, $post_term_names ) )
-                    wp_set_post_terms( $post_id, $term_name, $taxonomy, true );
+                if(!in_array($term_name, $post_term_names))
+                    wp_set_post_terms($post_id, $term_name, $taxonomy, true);
 
                 // Set/save the attribute data in the product variation
-                update_post_meta( $variation_id, 'attribute_'.$taxonomy, $term_slug );
+                update_post_meta($variation_id, 'attribute_'.$taxonomy, $term_slug);
             }
 
             ## Set/save all other data
@@ -572,9 +579,16 @@ class Aralco_Processing_Helper {
             $variation->set_regular_price($aralco_product['Product']['Price']);
 
             // Stock
-            $variation->set_manage_stock(false);
-            $variation->set_backorders('no');
-            $variation->set_stock_status('');
+            if($new) {
+                $options = get_option(ARALCO_SLUG . '_options');
+                $backorders = ($options !== false &&
+                    isset($options[ARALCO_SLUG . '_field_allow_backorders']) &&
+                    $options[ARALCO_SLUG . '_field_allow_backorders'] == '1') ?
+                    'notify' : 'no';
+                $variation->set_manage_stock(false);
+                $variation->set_backorders($backorders);
+                $variation->set_stock_status('');
+            }
 
             if(isset($aralco_product['Product']['WebProperties']['Weight'])){
                 $variation->set_weight($aralco_product['Product']['WebProperties']['Weight']);
