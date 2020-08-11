@@ -224,18 +224,20 @@ class Aralco_Processing_Helper {
             try{
                 $product->set_catalog_visibility('visible');
             } catch(Exception $e) {}
-            if(!$has_dim) {
-                $options = get_option(ARALCO_SLUG . '_options');
-                $backorders = ($options !== false &&
-                    isset($options[ARALCO_SLUG . '_field_allow_backorders']) &&
-                    $options[ARALCO_SLUG . '_field_allow_backorders'] == '1') ?
-                    'notify' : 'no';
-                $product->set_stock_status('instock');
-                $product->set_total_sales(0);
-                $product->set_downloadable(false);
-                $product->set_virtual(false);
+            $product->set_stock_status('instock');
+            $options = get_option(ARALCO_SLUG . '_options');
+            $backorders = ($options !== false &&
+                isset($options[ARALCO_SLUG . '_field_allow_backorders']) &&
+                $options[ARALCO_SLUG . '_field_allow_backorders'] == '1') ?
+                'notify' : 'no';
+            $product->set_backorders($backorders);
+            $product->set_total_sales(0);
+            $product->set_downloadable(false);
+            $product->set_virtual(false);
+            if($has_dim) {
+                $product->set_manage_stock(true);
+            } else {
                 $product->set_manage_stock(false);
-                $product->set_backorders($backorders);
             }
         }
 
@@ -498,9 +500,9 @@ class Aralco_Processing_Helper {
 
             $results = (new WP_Query($args))->get_posts();
 
-            $new = count($results) > 0;
+            $new = count($results) <= 0;
 
-            if(!$new) {
+            if($new) {
                 // Get the Variable product object (parent)
                 $product = wc_get_product($post_id);
 
