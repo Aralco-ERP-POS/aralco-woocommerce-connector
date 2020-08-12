@@ -1251,7 +1251,7 @@ class Aralco_Processing_Helper {
             }
 
             $price = round($price, $precision);
-            $grids = get_post_meta($item->get_id(), '_aralco_grids', true);
+            $grids = get_post_meta($product->get_id(), '_aralco_grids', true);
             $aralco_product_id = get_post_meta($product->get_id(), '_aralco_id', true);
             if($aralco_product_id == false) {
                 $aralco_product_id = get_post_meta($product->get_parent_id(), '_aralco_id', true);
