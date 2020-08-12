@@ -667,6 +667,9 @@ class Aralco_Processing_Helper {
             'notify' : 'no';
 
         foreach ($inventory as $index => $item){
+            $options = get_option(ARALCO_SLUG . '_options');
+            if($item['StoreID'] != $options[ARALCO_SLUG . '_field_store_id']) continue;
+
             $args = array(
                 'posts_per_page' => 1,
                 'post_type'      => 'product',

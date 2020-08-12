@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.13.3
+ * Version: 1.13.4
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.13.3
+ * @version 1.13.4
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -630,22 +630,47 @@ class Aralco_WooCommerce_Connector {
 
             if(in_array('departments', $options)) {
                 Aralco_Processing_Helper::sync_departments();
+            } else {
+                update_option(ARALCO_SLUG . '_last_sync_department_count', 0);
+                update_option(ARALCO_SLUG . '_last_sync_duration_departments', 0);
             }
+
             if(in_array('groupings', $options)) {
                 Aralco_Processing_Helper::sync_groupings();
+            } else {
+                update_option(ARALCO_SLUG . '_last_sync_grouping_count', 0);
+                update_option(ARALCO_SLUG . '_last_sync_duration_groupings', 0);
             }
+
             if(in_array('grids', $options)) {
                 Aralco_Processing_Helper::sync_grids();
+            } else {
+                update_option(ARALCO_SLUG . '_last_sync_grid_count', 0);
+                update_option(ARALCO_SLUG . '_last_sync_duration_grids', 0);
             }
+
             if(in_array('products', $options)) {
                 Aralco_Processing_Helper::sync_products();
+            } else {
+                update_option(ARALCO_SLUG . '_last_sync_product_count', 0);
+                update_option(ARALCO_SLUG . '_last_sync_duration_products', 0);
             }
+
             if(in_array('stock', $options)) {
                 Aralco_Processing_Helper::sync_stock();
+            } else {
+                update_option(ARALCO_SLUG . '_last_sync_stock_count', 0);
+                update_option(ARALCO_SLUG . '_last_sync_duration_stock', 0);
             }
+
             if(in_array('customer_groups', $options)) {
                 Aralco_Processing_Helper::sync_customer_groups();
+            } else {
+                update_option(ARALCO_SLUG . '_last_sync_customer_groups_count', 0);
+                update_option(ARALCO_SLUG . '_last_sync_duration_customer_groups', 0);
             }
+
+            update_option(ARALCO_SLUG . '_last_sync', date("Y-m-d\TH:i:s"));
         } catch (Exception $e) {
             // Do nothing
         }
