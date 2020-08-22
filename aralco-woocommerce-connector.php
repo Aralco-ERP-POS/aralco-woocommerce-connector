@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.14.0
+ * Version: 1.14.1
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.14.0
+ * @version 1.14.1
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -575,6 +575,15 @@ class Aralco_WooCommerce_Connector {
             update_option(ARALCO_SLUG . '_last_sync_customer_groups_count', 0);
             update_option(ARALCO_SLUG . '_last_sync_duration_customer_groups', 0);
         }
+        if($what_to_sync['taxes']) {
+            $result = Aralco_Processing_Helper::sync_taxes();
+            if($result !== true){
+                array_push($errors, $result);
+            }
+        } else {
+            update_option(ARALCO_SLUG . '_last_sync_taxes_count', 0);
+            update_option(ARALCO_SLUG . '_last_sync_duration_taxes', 0);
+        }
         update_option(ARALCO_SLUG . '_last_sync', date("Y-m-d\TH:i:s"));
 
         if (count($errors) <= 0) {
@@ -669,6 +678,13 @@ class Aralco_WooCommerce_Connector {
             } else {
                 update_option(ARALCO_SLUG . '_last_sync_customer_groups_count', 0);
                 update_option(ARALCO_SLUG . '_last_sync_duration_customer_groups', 0);
+            }
+
+            if(in_array('taxes', $options)) {
+                Aralco_Processing_Helper::sync_taxes();
+            } else {
+                update_option(ARALCO_SLUG . '_last_sync_taxes_count', 0);
+                update_option(ARALCO_SLUG . '_last_sync_duration_taxes', 0);
             }
 
             update_option(ARALCO_SLUG . '_last_sync', date("Y-m-d\TH:i:s"));
