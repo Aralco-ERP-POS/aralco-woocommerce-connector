@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.14.1
+ * Version: 1.14.2
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.14.1
+ * @version 1.14.2
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -517,7 +517,8 @@ class Aralco_WooCommerce_Connector {
             'grids' => isset($_POST['sync-grids']),
             'products' => isset($_POST['sync-products']),
             'stock' => isset($_POST['sync-stock']),
-            'customer_groups' => isset($_POST['sync-customer-groups'])
+            'customer_groups' => isset($_POST['sync-customer-groups']),
+            'taxes' => isset($_POST['sync-taxes'])
         );
 
         $errors = array();
