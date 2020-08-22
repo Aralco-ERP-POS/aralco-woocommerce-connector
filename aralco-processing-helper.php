@@ -156,6 +156,7 @@ class Aralco_Processing_Helper {
         update_post_meta($post_id, '_sku', $item['Product']['Code']);
         update_post_meta($post_id, '_visibility', 'visible');
         update_post_meta($post_id, '_aralco_id', $item['ProductID']);
+        update_post_meta($post_id, '_aralco_taxes', $item['Product']['Taxes']);
 
         $price = $item['Product']['Price'];
         $discount_price = isset($item['Product']['DiscountPrice']) ? $item['Product']['DiscountPrice'] : $item['Product']['Price'];
@@ -1137,6 +1138,51 @@ class Aralco_Processing_Helper {
             /** @noinspection PhpUndefinedVariableInspection */
             $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
             update_option(ARALCO_SLUG . '_last_sync_duration_customer_groups', $time_taken);
+        } catch(Exception $e) {}
+
+        return true;
+    }
+
+    static function sync_taxes() {
+        try{
+            $start_time = new DateTime();
+        } catch(Exception $e) {}
+
+        $taxes = Aralco_Connection_Helper::getTaxes();
+        if ($taxes instanceof WP_Error) return $taxes;
+
+        global $wpdb;
+        $wpdb->delete($wpdb->prefix . 'woocommerce_tax_rates', array('tax_rate_class' => ''), array('%s'));
+        $tax_mapping = array();
+        $orderCounter = 0;
+        foreach ($taxes as $i => $tax){
+            // '%d', '%f', '%s' (integer, float, string).
+            $tax_mapping[$tax['id']] = array();
+            $provinces = explode(',', isset($tax['provinceState']) ? $tax['provinceState'] : '');
+            foreach ($provinces as $i2 => $province){
+                if (!in_array(strlen(trim($province)), array(0, 2))) continue; // Only allow two letter state codes and empty fields
+                $result = $wpdb->insert($wpdb->prefix . 'woocommerce_tax_rates', array(
+                    'tax_rate_state' => strtoupper(trim($province)),
+                    'tax_rate' => number_format($tax['percentage'], 4, '.', ''),
+                    'tax_rate_name' => $tax['name'],
+                    'tax_rate_priority' => $tax['ecommerceFederalTax'] == true ? 1 : 2,
+                    'tax_rate_compound' => 0,
+                    'tax_rate_shipping' => 1,
+                    'tax_rate_order' => $orderCounter++
+                ));
+                if($result != false) {
+                    $tax_mapping[$tax['id']][] = $wpdb->insert_id;
+                }
+            }
+        }
+
+        update_option(ARALCO_SLUG . '_tax_mapping', $tax_mapping);
+        update_option(ARALCO_SLUG . '_last_sync_taxes_count', count($tax_mapping));
+
+        try{
+            /** @noinspection PhpUndefinedVariableInspection */
+            $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
+            update_option(ARALCO_SLUG . '_last_sync_duration_taxes', $time_taken);
         } catch(Exception $e) {}
 
         return true;

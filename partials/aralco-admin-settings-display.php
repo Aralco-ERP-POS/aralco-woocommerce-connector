@@ -193,6 +193,7 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
         <label><input type="checkbox" name="sync-products" checked="checked">Products</label>
         <label><input type="checkbox" name="sync-stock" checked="checked">Stock</label>
         <label><input type="checkbox" name="sync-customer-groups" checked="checked">Customer Groups</label>
+        <label><input type="checkbox" name="sync-taxes" checked="checked">Taxes</label>
         <?php submit_button('Sync Now'); ?>
     </form>
     <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post">
@@ -205,6 +206,7 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
         <label><input type="checkbox" name="sync-products" checked="checked">Products</label>
         <label><input type="checkbox" name="sync-stock" checked="checked">Stock</label>
         <label><input type="checkbox" name="sync-customer-groups" checked="checked">Customer Groups</label>
+        <label><input type="checkbox" name="sync-taxes" checked="checked">Taxes</label>
         <?php submit_button('Force Sync Now'); ?>
     </form>
     </div>
