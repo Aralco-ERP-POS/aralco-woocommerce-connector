@@ -666,6 +666,7 @@ class Aralco_Processing_Helper {
             isset($options[ARALCO_SLUG . '_field_allow_backorders']) &&
             $options[ARALCO_SLUG . '_field_allow_backorders'] == '1') ?
             'notify' : 'no';
+        $backorder_stock_status = ($backorders == 'no')? 'outofstock' : 'onbackorder';
 
         foreach ($inventory as $index => $item){
             $options = get_option(ARALCO_SLUG . '_options');
@@ -727,7 +728,7 @@ class Aralco_Processing_Helper {
             update_post_meta($product_id, '_manage_stock', 'yes');
             update_post_meta($product_id, '_backorders', $backorders);
             update_post_meta($product_id, '_stock', $available);
-            update_post_meta($product_id, '_stock_status', ($available >= 1) ? 'instock' : 'onbackorder');
+            update_post_meta($product_id, '_stock_status', ($available >= 1) ? 'instock' : $backorder_stock_status);
             $count++;
         }
 
@@ -744,7 +745,7 @@ class Aralco_Processing_Helper {
             update_post_meta($product_id, '_manage_stock', 'yes');
             update_post_meta($product_id, '_backorders', $backorders);
             update_post_meta($product_id, '_stock', $item);
-            update_post_meta($product_id, '_stock_status', ($item >= 1) ? 'instock' : 'onbackorder');
+            update_post_meta($product_id, '_stock_status', ($item >= 1) ? 'instock' : $backorder_stock_status);
             $count++;
         }
 

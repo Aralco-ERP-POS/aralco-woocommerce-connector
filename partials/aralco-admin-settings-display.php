@@ -26,8 +26,8 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
             flex-wrap: wrap;
         }
         .aralco-columns > * {
-            flex-basis: 49%;
-            width: 49%;
+            flex-basis: 32%;
+            width: 32%;
         }
         .aralco-columns h2 {
             text-align: center;
@@ -147,68 +147,75 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
     <?php } ?>
     <h1>Tools</h1>
     <div class="aralco-columns form-requires-load-blur">
-    <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post">
-        <h2>Test the Connection</h2>
-        <p>Remember to save you settings before testing the connection. Selecting "Test Connection" uses the saved configuration.</p>
-        <input type="hidden" name="test-connection" value="1">
-        <?php submit_button('Test Connection'); ?>
-    </form>
-    <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post">
-        <h2>Get Order JSON (DEBUG)</h2>
-        <p>Used to get the json data for a specific order. Only the last 20 are shown. Debug tool. May be removed in the future.</p>
-        <input type="hidden" name="get-order-json" value="1">
-        <label>Order
-        <select name="order-id">
-            <?php
-            try {
-                $orders = (new WC_Order_Query(array(
-                    'limit' => 20,
-                    'orderby' => 'date',
-                    'order' => 'DESC',
-                    'return' => 'objects'
-                )))->get_orders();
-                if(is_array($orders) && count($orders) > 0) {
-                    /** @var Automattic\WooCommerce\Admin\Overrides\Order $order */
-                    foreach ($orders as $i => $order) { ?>
-            <option value="<?php echo $order->get_id() ?>"<?php echo ($i == 0)? ' selected="selected"' : ''; ?>>#<?php echo $order->get_id() . ' - ' . $order->get_billing_first_name() . ' ' .
-                    $order->get_billing_last_name() . ', ' . strip_tags(WC_Price($order->get_total())); ?></option>
-                    <?php }
-                } else { ?>
-            <option value="-1">No Orders Found</option>
-                <?php }
-            } catch (Exception $e) { ?>
-            <option value="-1">No Orders Found</option>
-            <?php } ?>
-        </select>
-        </label>
-        <?php submit_button('Get JSON'); ?>
-    </form>
-    <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post">
-        <h2>Sync Now</h2>
-        <p>Manually sync data from Aralco. Running this will get all products in the last hour or since last sync, whichever is greater.</p>
-        <input type="hidden" name="sync-now" value="1">
-        <label><input type="checkbox" name="sync-departments">Departments</label>
-        <label><input type="checkbox" name="sync-groupings">Groupings</label>
-        <label><input type="checkbox" name="sync-grids">Grids</label>
-        <label><input type="checkbox" name="sync-products" checked="checked">Products</label>
-        <label><input type="checkbox" name="sync-stock" checked="checked">Stock</label>
-        <label><input type="checkbox" name="sync-customer-groups" checked="checked">Customer Groups</label>
-        <label><input type="checkbox" name="sync-taxes" checked="checked">Taxes</label>
-        <?php submit_button('Sync Now'); ?>
-    </form>
-    <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post">
-        <h2>Re-Sync</h2>
-        <p>Manually sync data from Aralco. This will ignore the last sync time and pull everything. Only do this if the data in WooCommerce becomes de-synced with what's in Aralco. This operation can take over an hour.</p>
-        <input type="hidden" name="force-sync-now" value="1">
-        <label><input type="checkbox" name="sync-departments">Departments</label>
-        <label><input type="checkbox" name="sync-groupings">Groupings</label>
-        <label><input type="checkbox" name="sync-grids">Grids</label>
-        <label><input type="checkbox" name="sync-products" checked="checked">Products</label>
-        <label><input type="checkbox" name="sync-stock" checked="checked">Stock</label>
-        <label><input type="checkbox" name="sync-customer-groups" checked="checked">Customer Groups</label>
-        <label><input type="checkbox" name="sync-taxes" checked="checked">Taxes</label>
-        <?php submit_button('Force Sync Now'); ?>
-    </form>
+        <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post">
+            <h2>Test the Connection</h2>
+            <p>Remember to save you settings before testing the connection. Selecting "Test Connection" uses the saved configuration.</p>
+            <input type="hidden" name="test-connection" value="1">
+            <?php submit_button('Test Connection'); ?>
+        </form>
+        <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post">
+            <h2>Sync Now</h2>
+            <p>Manually sync data from Aralco. Running this will get all products in the last hour or since last sync, whichever is greater.</p>
+            <input type="hidden" name="sync-now" value="1">
+            <label><input type="checkbox" name="sync-departments">Departments</label>
+            <label><input type="checkbox" name="sync-groupings">Groupings</label>
+            <label><input type="checkbox" name="sync-grids">Grids</label>
+            <label><input type="checkbox" name="sync-products" checked="checked">Products</label>
+            <label><input type="checkbox" name="sync-stock" checked="checked">Stock</label>
+            <label><input type="checkbox" name="sync-customer-groups" checked="checked">Customer Groups</label>
+            <label><input type="checkbox" name="sync-taxes" checked="checked">Taxes</label>
+            <?php submit_button('Sync Now'); ?>
+        </form>
+        <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post">
+            <h2>Re-Sync</h2>
+            <p>Manually sync data from Aralco. This will ignore the last sync time and pull everything. Only do this if the data in WooCommerce becomes de-synced with what's in Aralco. This operation can take over an hour.</p>
+            <input type="hidden" name="force-sync-now" value="1">
+            <label><input type="checkbox" name="sync-departments">Departments</label>
+            <label><input type="checkbox" name="sync-groupings">Groupings</label>
+            <label><input type="checkbox" name="sync-grids">Grids</label>
+            <label><input type="checkbox" name="sync-products" checked="checked">Products</label>
+            <label><input type="checkbox" name="sync-stock" checked="checked">Stock</label>
+            <label><input type="checkbox" name="sync-customer-groups" checked="checked">Customer Groups</label>
+            <label><input type="checkbox" name="sync-taxes" checked="checked">Taxes</label>
+            <?php submit_button('Force Sync Now'); ?>
+        </form>
+        <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post">
+            <h2>Get Order JSON (DEBUG)</h2>
+            <p>Used to get the json data for a specific order. Only the last 20 are shown. Debug tool. May be removed in the future.</p>
+            <input type="hidden" name="get-order-json" value="1">
+            <label>Order
+                <select name="order-id">
+                    <?php
+                    try {
+                        $orders = (new WC_Order_Query(array(
+                            'limit' => 20,
+                            'orderby' => 'date',
+                            'order' => 'DESC',
+                            'return' => 'objects'
+                        )))->get_orders();
+                        if(is_array($orders) && count($orders) > 0) {
+                            /** @var Automattic\WooCommerce\Admin\Overrides\Order $order */
+                            foreach ($orders as $i => $order) { ?>
+                                <option value="<?php echo $order->get_id() ?>"<?php echo ($i == 0)? ' selected="selected"' : ''; ?>>#<?php echo $order->get_id() . ' - ' . $order->get_billing_first_name() . ' ' .
+                                        $order->get_billing_last_name() . ', ' . strip_tags(WC_Price($order->get_total())); ?></option>
+                            <?php }
+                        } else { ?>
+                            <option value="-1">No Orders Found</option>
+                        <?php }
+                    } catch (Exception $e) { ?>
+                        <option value="-1">No Orders Found</option>
+                    <?php } ?>
+                </select>
+            </label>
+            <?php submit_button('Get JSON'); ?>
+        </form>
+        <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post">
+            <h2>Fix Stock Status (DEBUG)</h2>
+            <p>Used to fix stock status to reflect the actual stock count. Debug tool. May be removed in the future.</p>
+            <input type="hidden" name="fix-stock-count" value="1">
+            <?php submit_button('Fix Stock'); ?>
+        </form>
+        <div class="dummy"></div>
     </div>
     <div>
         <p style="color: #ff0000; text-align: center">If you get a critical error while syncing, you may need to adjust the server's php timeout or memory limit. Contact Aralco if you need assistance with that.</p>

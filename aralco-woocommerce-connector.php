@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.14.2
+ * Version: 1.14.3
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.14.2
+ * @version 1.14.3
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -461,6 +461,10 @@ class Aralco_WooCommerce_Connector {
             $this->test_connection();
         }
 
+        if (isset($_POST['fix-stock-count'])){
+            $this->fix_stock_count();
+        }
+
         if (isset($_POST['sync-now'])){
             $this->sync_products();
         }
@@ -500,6 +504,58 @@ class Aralco_WooCommerce_Connector {
                 ARALCO_SLUG . '_messages',
                 __('Something went wrong. Please contact Aralco.', ARALCO_SLUG) . ' (Code 1)',
                 'error'
+            );
+        }
+    }
+
+    /**
+     * Method called to test the connection settings from the GUI. Adds settings errors that will be shown on the next
+     * admin page.
+     */
+    public function fix_stock_count() {
+        $options = get_option(ARALCO_SLUG . '_options');
+        $backorder_stock_status = ($options !== false &&
+            isset($options[ARALCO_SLUG . '_field_allow_backorders']) &&
+            $options[ARALCO_SLUG . '_field_allow_backorders'] == '1') ?
+            'onbackorder' : 'outofstock';
+        $result = 0;
+        global $wpdb;
+
+        foreach (array(
+            array('<=', $backorder_stock_status),
+            array('>', 'instock')
+        ) as $i => $operation){
+            $rows = $wpdb->get_results("SELECT DISTINCT post_id FROM {$wpdb->prefix}postmeta WHERE meta_key = '_stock' AND meta_value {$operation[0]} 0", ARRAY_A);
+            $ids = [];
+            foreach ($rows as $row) {
+                $ids[] = $row['post_id'];
+            }
+            $ids = implode(', ', $ids);
+
+            $q = "UPDATE {$wpdb->prefix}postmeta SET meta_value = '{$operation[1]}' WHERE meta_key = '_stock_status' AND post_id IN ({$ids})";
+
+            $temp_result = $wpdb->query($q);
+            if ($temp_result === false) {
+                $result = $temp_result;
+                break;
+            }
+            $result += $temp_result;
+        }
+
+
+        if($result === false) {
+            add_settings_error(
+                ARALCO_SLUG . '_messages',
+                ARALCO_SLUG . '_messages',
+                __('Failed to update table.', ARALCO_SLUG),
+                'error'
+            );
+        } else {
+            add_settings_error(
+                ARALCO_SLUG . '_messages',
+                ARALCO_SLUG . '_message',
+                __("Fix successful. ${result} record(s) updated.", ARALCO_SLUG),
+                'updated'
             );
         }
     }

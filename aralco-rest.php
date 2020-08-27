@@ -8,6 +8,7 @@ function aralco_register_rest_routs() {
         '/widget/filters/(?P<department>[a-z0-9\-]+)',
         array(
             'methods' => 'GET',
+            'permission_callback' => '__return_true',
             'callback' => 'aralco_get_filters_for_department'
         )
     );
