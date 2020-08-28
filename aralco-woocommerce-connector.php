@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.14.5
+ * Version: 1.14.6
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.14.5
+ * @version 1.14.6
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -95,6 +95,9 @@ class Aralco_WooCommerce_Connector {
 
             // register stock check for cart page hook
             add_action('woocommerce_before_cart', array($this, 'cart_check_product_stock'), 100, 0);
+
+            // register tax handler
+            add_action('woocommerce_cart_totals_get_item_tax_rates', array($this, 'calculate_custom_tax_totals'), 10, 3);
 
             // disable the need for unique SKUs. Required for Aralco products.
             add_filter('wc_product_has_unique_sku', '__return_false' );
@@ -1296,6 +1299,61 @@ $repeated_snippet
         if ($result instanceof WP_Error) {
             wc_add_notice($result->get_error_message(), 'error');
         }
+    }
+
+    public function calculate_custom_tax_totals($item_tax_rates, $item, $cart){
+
+//        WC_Tax::get_tax_location() -> {0 = CA, 1 = ON, 2 = V7P 3R9, 3 = Vancouver}
+
+        $tax_ids = array();
+        $aralco_tax_ids = get_post_meta($item->object['product_id'], '_aralco_taxes', true);
+        if(is_array($aralco_tax_ids)){
+            $tax_mappings = get_option(ARALCO_SLUG . '_tax_mapping', array());
+            foreach ($aralco_tax_ids as $aralco_tax_id){
+                $tax_ids = array_merge($tax_ids, $tax_mappings[$aralco_tax_id]);
+            }
+            $tax_ids = implode(',', $tax_ids);
+            global $wpdb;
+            $taxes = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}woocommerce_tax_rates WHERE tax_rate_id IN ({$tax_ids}) ORDER BY tax_rate_priority, tax_rate_order", ARRAY_A);
+
+//            echo '<pre>' . print_r($taxes, true) . '</pre>';
+
+            $getTax = function($p, $state) use ($taxes) {
+                foreach ($taxes as $tax){
+                    if((empty($tax['tax_rate_state']) || $tax['tax_rate_state'] == $state) && $tax['tax_rate_priority'] == $p){
+                        return $tax;
+                    }
+                }
+                return null;
+            };
+
+            $location = WC_Tax::get_tax_location();
+            $state = (is_array($location) && isset($location[1])) ? $location[1] : '';
+            $to_return = array();
+            $tax1 = $getTax(1, $state);
+            $tax2 = $getTax(2, $state);
+            if($tax1 !== null) {
+                $to_return[$tax1['tax_rate_id']] = array(
+                    'rate' => (float)$tax1['tax_rate'],
+                    'label' => $tax1['tax_rate_name'],
+                    'shipping' => $tax1['tax_rate_shipping'] == 1 ? 'yes' : 'no',
+                    'compound' => $tax1['tax_rate_compound'] == 1 ? 'yes' : 'no',
+                );
+            }
+            if($tax2 !== null) {
+                $to_return[$tax2['tax_rate_id']] = array(
+                    'rate' => (float)$tax2['tax_rate'],
+                    'label' => $tax2['tax_rate_name'],
+                    'shipping' => $tax2['tax_rate_shipping'] == 1 ? 'yes' : 'no',
+                    'compound' => $tax2['tax_rate_compound'] == 1 ? 'yes' : 'no',
+                );
+            }
+//            echo '<pre>' . print_r($to_return, true) . '</pre>';
+            return $to_return;
+        }
+
+        wc_add_notice(sprintf(__('Sorry, but "%s" appears to be missing tax info. Please report this to the site administrator.', ARALCO_SLUG), $item->object['data']->get_name()), 'error');
+        return $item_tax_rates;
     }
 
     /**
