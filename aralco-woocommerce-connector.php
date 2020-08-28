@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.14.6
+ * Version: 1.14.7
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.14.6
+ * @version 1.14.7
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -468,6 +468,10 @@ class Aralco_WooCommerce_Connector {
             $this->fix_stock_count();
         }
 
+        if (isset($_POST['fix-stamped-taxes'])){
+            $this->fix_stamped_taxes();
+        }
+
         if (isset($_POST['sync-now'])){
             $this->sync_products();
         }
@@ -512,8 +516,7 @@ class Aralco_WooCommerce_Connector {
     }
 
     /**
-     * Method called to test the connection settings from the GUI. Adds settings errors that will be shown on the next
-     * admin page.
+     * Used to fix the stock status to match the stock count
      */
     public function fix_stock_count() {
         $options = get_option(ARALCO_SLUG . '_options');
@@ -560,6 +563,29 @@ class Aralco_WooCommerce_Connector {
                 __("Fix successful. ${result} record(s) updated.", ARALCO_SLUG),
                 'updated'
             );
+        }
+    }
+
+    /**
+     * Use to fix all the tax stamps on all the products without syncing everything
+     */
+    public function fix_stamped_taxes() {
+        $aralco_products = Aralco_Connection_Helper::getProducts(date("Y-m-d\TH:i:s", mktime(0, 0, 0, 1, 1, 1900)));
+        if(is_array($aralco_products)) { // Got Data
+            foreach ($aralco_products as $item){
+                $args = array(
+                    'posts_per_page'    => 1,
+                    'post_type'         => 'product',
+                    'meta_key'          => '_aralco_id',
+                    'meta_value'        => strval($item['ProductID']),
+                    'post_status'       => array('publish', 'pending', 'draft', 'auto-draft', 'future', 'private', 'inherit', 'trash')
+                );
+                $results = (new WP_Query($args))->get_posts();
+                if (count($results) > 0){
+                    $post_id = $results[0]->ID;
+                    update_post_meta($post_id, '_aralco_taxes', $item['Product']['Taxes']);
+                }
+            }
         }
     }
 

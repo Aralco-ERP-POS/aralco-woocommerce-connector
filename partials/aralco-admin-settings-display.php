@@ -215,7 +215,12 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
             <input type="hidden" name="fix-stock-count" value="1">
             <?php submit_button('Fix Stock'); ?>
         </form>
-        <div class="dummy"></div>
+        <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post">
+            <h2>Fix Product Taxes (DEBUG)</h2>
+            <p>Used to update all products with stamped taxes. Debug tool. May be removed in the future.</p>
+            <input type="hidden" name="fix-stamped-taxes" value="1">
+            <?php submit_button('Fix Taxes'); ?>
+        </form>
     </div>
     <div>
         <p style="color: #ff0000; text-align: center">If you get a critical error while syncing, you may need to adjust the server's php timeout or memory limit. Contact Aralco if you need assistance with that.</p>
