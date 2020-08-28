@@ -1153,28 +1153,75 @@ class Aralco_Processing_Helper {
         if ($taxes instanceof WP_Error) return $taxes;
 
         global $wpdb;
-        $wpdb->delete($wpdb->prefix . 'woocommerce_tax_rates', array('tax_rate_class' => ''), array('%s'));
+        $existing_mapping = get_option(ARALCO_SLUG . '_tax_mapping', array());
         $tax_mapping = array();
         $orderCounter = 0;
-        foreach ($taxes as $i => $tax){
+        foreach ($taxes as $tax){
             // '%d', '%f', '%s' (integer, float, string).
             $tax_mapping[$tax['id']] = array();
             $provinces = explode(',', isset($tax['provinceState']) ? $tax['provinceState'] : '');
             foreach ($provinces as $i2 => $province){
-                if (!in_array(strlen(trim($province)), array(0, 2))) continue; // Only allow two letter state codes and empty fields
-                $result = $wpdb->insert($wpdb->prefix . 'woocommerce_tax_rates', array(
-                    'tax_rate_state' => strtoupper(trim($province)),
-                    'tax_rate' => number_format($tax['percentage'], 4, '.', ''),
-                    'tax_rate_name' => $tax['name'],
-                    'tax_rate_priority' => $tax['ecommerceFederalTax'] == true ? 1 : 2,
-                    'tax_rate_compound' => 0,
-                    'tax_rate_shipping' => 1,
-                    'tax_rate_order' => $orderCounter++
-                ));
-                if($result != false) {
-                    $tax_mapping[$tax['id']][] = $wpdb->insert_id;
+                $province = strtoupper(trim($province));
+                if (!in_array(strlen($province), array(0, 2))) continue; // Only allow two letter state codes and empty fields
+
+                $id = -1;
+
+                if(isset($existing_mapping[$tax['id']])){
+                    if(count($existing_mapping[$tax['id']]) > 0) {
+                        $ids = implode(',', $existing_mapping[$tax['id']]);
+                        $existing_taxes = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}woocommerce_tax_rates WHERE tax_rate_id IN ({$ids})", ARRAY_A);
+                        foreach ($existing_taxes as $i => $existing_tax){
+                            if($existing_tax['tax_rate_state'] == $province){
+                                $id = $existing_tax['tax_rate_id'];
+                                unset($existing_mapping[$tax['id']][$i]);
+                                $existing_mapping[$tax['id']] = array_values($existing_mapping[$tax['id']]);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if($id >= 0){
+                    $result = $wpdb->update($wpdb->prefix . 'woocommerce_tax_rates', array(
+                        'tax_rate' => number_format($tax['percentage'], 4, '.', ''),
+                        'tax_rate_name' => $tax['name'],
+                        'tax_rate_priority' => $tax['ecommerceFederalTax'] == true? 1 : 2,
+                        'tax_rate_compound' => 0,
+                        'tax_rate_shipping' => 1,
+                        'tax_rate_order' => $orderCounter++
+                    ), array(
+                        'tax_rate_id' => $id
+                    ));
+                    if ($result != false) {
+                        $tax_mapping[$tax['id']][] = $id;
+                    }
+                } else {
+                    $result = $wpdb->insert($wpdb->prefix . 'woocommerce_tax_rates', array(
+                        'tax_rate_state' => $province,
+                        'tax_rate' => number_format($tax['percentage'], 4, '.', ''),
+                        'tax_rate_name' => $tax['name'],
+                        'tax_rate_priority' => $tax['ecommerceFederalTax'] == true? 1 : 2,
+                        'tax_rate_compound' => 0,
+                        'tax_rate_shipping' => 1,
+                        'tax_rate_order' => $orderCounter++
+                    ));
+                    if ($result != false) {
+                        $tax_mapping[$tax['id']][] = $wpdb->insert_id;
+                    }
                 }
             }
+        }
+
+        $ids_to_remove = [];
+        foreach ($existing_mapping as $tax){
+            foreach ($tax as $region){
+                $ids_to_remove[] = $region;
+            }
+        }
+
+        if(count($ids_to_remove) > 0) {
+            $ids_to_remove = implode(',', $ids_to_remove);
+            $wpdb->query("DELETE FROM {$wpdb->prefix}woocommerce_tax_rates WHERE tax_rate_id IN ({$ids_to_remove})");
         }
 
         update_option(ARALCO_SLUG . '_tax_mapping', $tax_mapping);

@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.14.3
+ * @version 1.14.4
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
