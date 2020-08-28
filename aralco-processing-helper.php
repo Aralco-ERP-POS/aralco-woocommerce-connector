@@ -1172,7 +1172,7 @@ class Aralco_Processing_Helper {
                         $existing_taxes = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}woocommerce_tax_rates WHERE tax_rate_id IN ({$ids})", ARRAY_A);
                         foreach ($existing_taxes as $i => $existing_tax){
                             if($existing_tax['tax_rate_state'] == $province){
-                                $id = $existing_tax['tax_rate_id'];
+                                $id = (int)$existing_tax['tax_rate_id'];
                                 unset($existing_mapping[$tax['id']][$i]);
                                 $existing_mapping[$tax['id']] = array_values($existing_mapping[$tax['id']]);
                                 break;
@@ -1192,7 +1192,7 @@ class Aralco_Processing_Helper {
                     ), array(
                         'tax_rate_id' => $id
                     ));
-                    if ($result != false) {
+                    if ($result !== false) {
                         $tax_mapping[$tax['id']][] = $id;
                     }
                 } else {
