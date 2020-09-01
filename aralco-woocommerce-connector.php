@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.14.7
+ * Version: 1.14.8
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.14.7
+ * @version 1.14.8
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -1342,11 +1342,12 @@ $repeated_snippet
             global $wpdb;
             $taxes = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}woocommerce_tax_rates WHERE tax_rate_id IN ({$tax_ids}) ORDER BY tax_rate_priority, tax_rate_order", ARRAY_A);
 
+//            echo '<pre>' . print_r(WC_Tax::get_tax_location(), true) . '</pre>';
 //            echo '<pre>' . print_r($taxes, true) . '</pre>';
 
             $getTax = function($p, $state) use ($taxes) {
                 foreach ($taxes as $tax){
-                    if((empty($tax['tax_rate_state']) || $tax['tax_rate_state'] == $state) && $tax['tax_rate_priority'] == $p){
+                    if(!empty($tax['tax_rate_state']) && $tax['tax_rate_state'] == $state && $tax['tax_rate_priority'] == $p){
                         return $tax;
                     }
                 }
