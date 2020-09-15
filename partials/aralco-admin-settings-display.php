@@ -195,9 +195,15 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
                         )))->get_orders();
                         if(is_array($orders) && count($orders) > 0) {
                             /** @var Automattic\WooCommerce\Admin\Overrides\Order $order */
-                            foreach ($orders as $i => $order) { ?>
-                                <option value="<?php echo $order->get_id() ?>"<?php echo ($i == 0)? ' selected="selected"' : ''; ?>>#<?php echo $order->get_id() . ' - ' . $order->get_billing_first_name() . ' ' .
-                                        $order->get_billing_last_name() . ', ' . strip_tags(WC_Price($order->get_total())); ?></option>
+                            foreach ($orders as $i => $order) {
+                                if (is_a($order, 'WC_Order_Refund')) {
+                                    $order = wc_get_order($order->get_parent_id());
+                                }
+                                $id = $order->get_id();
+                                $name = $order->get_billing_first_name() . ' ' . $order->get_billing_last_name();
+                                $amount = strip_tags(WC_Price($order->get_total())); ?>
+                                <option value="<?php echo $id ?>"<?php echo ($i == 0)? ' selected="selected"' : ''; ?>>#<?php
+                                    echo $id . ' - ' . $name . ', ' . $amount; ?></option>
                             <?php }
                         } else { ?>
                             <option value="-1">No Orders Found</option>

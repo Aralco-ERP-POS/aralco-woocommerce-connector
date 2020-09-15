@@ -36,6 +36,19 @@ class Aralco_Processing_Helper {
             );
         }
 
+        /* Get and save shipping product code */
+        $shipping_setting = Aralco_Connection_Helper::getSetting('ShippingProductCode');
+        if ($shipping_setting instanceof WP_Error) return $shipping_setting;
+        global $temp_shipping_product_code;
+        if (is_array($shipping_setting) && isset($shipping_setting['Value'])){
+            update_option(ARALCO_SLUG . '_shipping_product_code', $shipping_setting['Value']);
+            $temp_shipping_product_code = $shipping_setting['Value'];
+        } else {
+            delete_option(ARALCO_SLUG . '_shipping_product_code');
+            $temp_shipping_product_code = null;
+        }
+
+
         $lastSync = get_option(ARALCO_SLUG . '_last_sync');
         if(!isset($lastSync) || $lastSync === false || $everything){
             $lastSync = date("Y-m-d\TH:i:s", mktime(0, 0, 0, 1, 1, 1900));
@@ -69,7 +82,7 @@ class Aralco_Processing_Helper {
                 }
                 if(count($list) > 0){
                     $list = implode(',', $list);
-                    $wpdb->query("UPDATE $wpdb->posts SET post_status = 'private' WHERE ID IN ($list)");
+                    $wpdb->query("UPDATE $wpdb->posts SET post_status = 'trash' WHERE ID IN ($list)");
                 }
             }
         } else if ($result instanceof WP_Error) return $result;
@@ -117,6 +130,13 @@ class Aralco_Processing_Helper {
      * @return bool|WP_Error
      */
     static function process_item($item) {
+        global $temp_shipping_product_code;
+        if(!is_null($temp_shipping_product_code) && strcasecmp($temp_shipping_product_code, $item['Product']['Code']) == 0){
+            $post_type = 'private';
+        } else {
+            $post_type = 'publish';
+        }
+
         $returnVal = true;
         $args = array(
             'posts_per_page'    => 1,
@@ -143,7 +163,7 @@ class Aralco_Processing_Helper {
             // Product is new
             $post_id = wp_insert_post(array(
                 'post_type'         => 'product',
-                'post_status'       => 'publish',
+                'post_status'       => $post_type,
                 'post_title'        => $item['Product']['Name'],
                 'post_content'      => $item['Product']['Description'],
                 'post_excerpt'      => $item['Product']['SeoDescription']
@@ -204,15 +224,15 @@ class Aralco_Processing_Helper {
                     return $result;
                 }
             } else {
-                if(is_array($results) && count($results) > 0 && $results[0]->post_status != 'publish') {
-                    $post = array('ID' => $post_id, 'post_status' => 'publish');
+                if(is_array($results) && count($results) > 0 && $results[0]->post_status != $post_type) {
+                    $post = array('ID' => $post_id, 'post_status' => $post_type);
                     wp_update_post($post);
                 }
-                delete_transient( 'wc_product_children_' . $post_id );
-                delete_transient( 'wc_var_prices_' . $post_id );
+                delete_transient('wc_product_children_' . $post_id);
+                delete_transient('wc_var_prices_' . $post_id);
             }
-        } else if (!$is_new && $results[0]->post_status != 'publish') {
-            $post = array('ID' => $post_id, 'post_status' => 'publish');
+        } else if (!$is_new && $results[0]->post_status != $post_type) {
+            $post = array('ID' => $post_id, 'post_status' => $post_type);
             wp_update_post($post);
         }
 
@@ -1152,6 +1172,14 @@ class Aralco_Processing_Helper {
         $taxes = Aralco_Connection_Helper::getTaxes();
         if ($taxes instanceof WP_Error) return $taxes;
 
+        $shipping_code = get_option(ARALCO_SLUG . '_shipping_product_code');
+        if($shipping_code !== false) {
+            $tax_shipping = get_post_meta(wc_get_product_id_by_sku($shipping_code), '_aralco_taxes', true);
+        }
+        if(!isset($tax_shipping) || !is_array($tax_shipping)){
+            $tax_shipping = [];
+        }
+
         global $wpdb;
         $existing_mapping = get_option(ARALCO_SLUG . '_tax_mapping', array());
         $tax_mapping = array();
@@ -1181,13 +1209,15 @@ class Aralco_Processing_Helper {
                     }
                 }
 
+                $shipping = (in_array($tax['id'], $tax_shipping, true) && !empty($province)) ? 1 : 0;
+
                 if($id >= 0){
                     $result = $wpdb->update($wpdb->prefix . 'woocommerce_tax_rates', array(
                         'tax_rate' => number_format($tax['percentage'], 4, '.', ''),
                         'tax_rate_name' => $tax['name'],
                         'tax_rate_priority' => $tax['ecommerceFederalTax'] == true? 1 : 2,
                         'tax_rate_compound' => 0,
-                        'tax_rate_shipping' => 1,
+                        'tax_rate_shipping' => $shipping,
                         'tax_rate_order' => $orderCounter++
                     ), array(
                         'tax_rate_id' => $id
@@ -1202,7 +1232,7 @@ class Aralco_Processing_Helper {
                         'tax_rate_name' => $tax['name'],
                         'tax_rate_priority' => $tax['ecommerceFederalTax'] == true? 1 : 2,
                         'tax_rate_compound' => 0,
-                        'tax_rate_shipping' => 1,
+                        'tax_rate_shipping' => $shipping,
                         'tax_rate_order' => $orderCounter++
                     ));
                     if ($result != false) {
