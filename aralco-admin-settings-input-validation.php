@@ -165,9 +165,25 @@ function aralco_validate_config($input) {
         )
     ))->is_valid($input[ARALCO_SLUG . '_field_sync_interval']) == false) $valid = false;
 
-    $input[ARALCO_SLUG . '_field_allow_backorders'] = (isset($input[ARALCO_SLUG . '_field_allow_backorders'])) ? '1' : '0';
+    if ((new Number_Validator(
+        ARALCO_SLUG . '_field_sync_chunking',
+        array(
+            'min' => 10,
+            'max' => 1000
+        )
+    ))->is_valid($input[ARALCO_SLUG . '_field_sync_chunking']) == false) $valid = false;
 
-    $input[ARALCO_SLUG . '_field_sync_enabled'] = (isset($input[ARALCO_SLUG . '_field_sync_enabled'])) ? '1' : '0';
+//    try {
+//        $file = fopen(ABSPATH . 'temp.txt', 'w');
+//        fwrite($file, print_r($input, true));
+//        fclose($file);
+//    } catch (Exception $e) {/* Do Nothing */}
+
+    $input[ARALCO_SLUG . '_field_allow_backorders'] = (isset($input[ARALCO_SLUG . '_field_allow_backorders']) &&
+        $input[ARALCO_SLUG . '_field_allow_backorders'] == 1) ? '1' : '0';
+
+    $input[ARALCO_SLUG . '_field_sync_enabled'] = (isset($input[ARALCO_SLUG . '_field_sync_enabled']) &&
+        $input[ARALCO_SLUG . '_field_sync_enabled'] == 1) ? '1' : '0';
 
     try{
         if($valid && $input[ARALCO_SLUG . '_field_sync_interval'] * $input[ARALCO_SLUG . '_field_sync_unit'] < 5){

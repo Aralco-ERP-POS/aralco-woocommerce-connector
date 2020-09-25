@@ -73,6 +73,10 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
         border-radius: 1em;
         background: #fff;
     }
+    .load-blur.has-progress > div,
+    .load-blur.has-question > div{
+        min-width: 300px;
+    }
     .load-blur .dashicons{
         height: 60px;
         width: 60px;
@@ -84,6 +88,26 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
         transition: 1s color;
         animation: blink 1s ease-in-out infinite;
         -webkit-animation: blink 1s ease-in-out infinite;
+    }
+    .load-blur .loading-bar {
+        position: relative;
+        width: 100%;
+        background-color: grey;
+    }
+    .load-blur #aralco-progress-text {
+        position: absolute;
+        color: #fff;
+        text-align: center;
+        line-height: 28px;
+        top:1px;
+        bottom:1px;
+        left:1px;
+        right:1px;
+    }
+    .load-blur #aralco-progress {
+        width: 1%;
+        height: 30px;
+        background-color: #00AADC;
     }
     @keyframes blink {
         0% {
@@ -112,6 +136,7 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
 <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
 <div class="wrap">
     <h1>Settings</h1>
+    <div id="aralco-js-error-box"></div>
     <div class="settings accordion">
         <h2>Hide/Show</h2>
         <form action="options.php" method="post">
@@ -146,17 +171,17 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
     ?></pre>
     <?php } ?>
     <h1>Tools</h1>
-    <div class="aralco-columns form-requires-load-blur">
-        <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post">
+    <div class="aralco-columns">
+        <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post" class="form-requires-load-blur">
             <h2>Test the Connection</h2>
             <p>Remember to save you settings before testing the connection. Selecting "Test Connection" uses the saved configuration.</p>
             <input type="hidden" name="test-connection" value="1">
             <?php submit_button('Test Connection'); ?>
         </form>
-        <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post">
+        <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post" class="sync-form">
             <h2>Sync Now</h2>
             <p>Manually sync data from Aralco. Running this will get all products in the last hour or since last sync, whichever is greater.</p>
-            <input type="hidden" name="sync-now" value="1">
+            <input type="hidden" name="sync-now" value="on">
             <label><input type="checkbox" name="sync-departments">Departments</label>
             <label><input type="checkbox" name="sync-groupings">Groupings</label>
             <label><input type="checkbox" name="sync-grids">Grids</label>
@@ -166,10 +191,10 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
             <label><input type="checkbox" name="sync-taxes" checked="checked">Taxes</label>
             <?php submit_button('Sync Now'); ?>
         </form>
-        <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post">
+        <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post" class="sync-form">
             <h2>Re-Sync</h2>
             <p>Manually sync data from Aralco. This will ignore the last sync time and pull everything. Only do this if the data in WooCommerce becomes de-synced with what's in Aralco. This operation can take over an hour.</p>
-            <input type="hidden" name="force-sync-now" value="1">
+            <input type="hidden" name="force-sync-now" value="on">
             <label><input type="checkbox" name="sync-departments">Departments</label>
             <label><input type="checkbox" name="sync-groupings">Groupings</label>
             <label><input type="checkbox" name="sync-grids">Grids</label>
@@ -179,7 +204,7 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
             <label><input type="checkbox" name="sync-taxes" checked="checked">Taxes</label>
             <?php submit_button('Force Sync Now'); ?>
         </form>
-        <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post">
+        <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post" class="form-requires-load-blur">
             <h2>Get Order JSON (DEBUG)</h2>
             <p>Used to get the json data for a specific order. Only the last 20 are shown. Debug tool. May be removed in the future.</p>
             <input type="hidden" name="get-order-json" value="1">
@@ -215,13 +240,13 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
             </label>
             <?php submit_button('Get JSON'); ?>
         </form>
-        <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post">
+        <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post" class="form-requires-load-blur">
             <h2>Fix Stock Status (DEBUG)</h2>
             <p>Used to fix stock status to reflect the actual stock count. Debug tool. May be removed in the future.</p>
             <input type="hidden" name="fix-stock-count" value="1">
             <?php submit_button('Fix Stock'); ?>
         </form>
-        <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post">
+        <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post" class="form-requires-load-blur">
             <h2>Fix Product Taxes (DEBUG)</h2>
             <p>Used to update all products with stamped taxes. Debug tool. May be removed in the future.</p>
             <input type="hidden" name="fix-stamped-taxes" value="1">
@@ -230,18 +255,18 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
     </div>
     <div>
         <p style="color: #ff0000; text-align: center">If you get a critical error while syncing, you may need to adjust the server's php timeout or memory limit. Contact Aralco if you need assistance with that.</p>
-        <h3 class="last-run-stats-title">Last Run Stats</h3>
+        <!--<h3 class="last-run-stats-title">Last Run Stats</h3>-->
         <div class="last-run-stats">
-            <span title="Last Completion Date">
+            <span title="Last Sync Completion Date">
                 <span class="dashicons dashicons-plugins-checked" aria-hidden="true"></span>
-                <span class="screen-reader-text">Last Completion Date:</span>
+                <span class="screen-reader-text">Last Sync Completion Date:</span>
                 <?php
                     $last_sync = get_option(ARALCO_SLUG . '_last_sync');
                     $total_records = 0;
                     $total_run_tiume = 0;
                     echo $last_sync !== false ? $last_sync . ' UTC' : '(never run)'
                     ?>
-            </span> <span title="Departments">
+            </span> <!--<span title="Departments">
                 <span class="dashicons dashicons-building" aria-hidden="true"></span>
                 <span class="screen-reader-text">Departments:</span>
                 <?php
@@ -256,12 +281,12 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
                 <span class="dashicons dashicons-grid-view" aria-hidden="true"></span>
                 <span class="screen-reader-text">Grids:</span>
                 <?php
-                $time_taken = get_option(ARALCO_SLUG . '_last_sync_duration_grids');
-                $count = get_option(ARALCO_SLUG . '_last_sync_grid_count');
-                if ($time_taken > 0) $total_run_tiume += $time_taken;
-                if ($count > 0) $total_records += $count;
-                echo ($count !== false ? $count : '0') . ' (' .
-                    ($time_taken !== false ? $time_taken : '0') . 's)'
+                    $time_taken = get_option(ARALCO_SLUG . '_last_sync_duration_grids');
+                    $count = get_option(ARALCO_SLUG . '_last_sync_grid_count');
+                    if ($time_taken > 0) $total_run_tiume += $time_taken;
+                    if ($count > 0) $total_records += $count;
+                    echo ($count !== false ? $count : '0') . ' (' .
+                        ($time_taken !== false ? $time_taken : '0') . 's)'
                 ?>
             </span> <span title="Groupings">
                 <span class="dashicons dashicons-index-card" aria-hidden="true"></span>
@@ -313,17 +338,108 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
                 <?php
                     echo $total_records . ' (' . $total_run_tiume . 's)'
                     ?>
-            </span>
+            </span>-->
         </div>
     </div>
     <hr>
     <div style="text-align: center;">Questions? Comments? Find a problem? <a href="https://aralco.com/services/support/" target="_blank" rel="noopener,noreferrer">Contact Aralco.</a></div>
 </div>
+<!--suppress JSJQueryEfficiency -->
 <script>
+    const wpApiSettings = {
+        root: "<?php echo esc_url_raw(rest_url()) ?>",
+        nonce: "<?php echo wp_create_nonce('wp_rest') ?>"
+    };
+
     jQuery(document).ready(function ($) {
         $('body').append('<div class="load-blur" style="display: none;"><div><p aria-hidden="true"><span class="dashicons dashicons-download blink"></span></p><h1>Please Wait...</h1></div></div>');
         $('.form-requires-load-blur .button').on('click', function () {
             $('.load-blur').show();
-        })
+        });
+
+        $(".sync-form").on('submit', function (e) {
+            e.preventDefault();
+            startSync(false, e.currentTarget)
+        });
+
+        function startSync(ignore, form){
+            let rawData = $(form).serializeArray();
+            let data = {};
+            if(ignore) data.ignore = true;
+            for (let i = 0; i < rawData.length; i++) {
+                data[rawData[i].name] = "1";
+            }
+
+            $('#aralco-js-error-box').empty();
+            aralcoAddProgress();
+
+            $.ajax({
+                url: wpApiSettings.root + "aralco-wc/v1/admin/new-sync",
+                method: 'GET',
+                beforeSend: function (xhr) {
+                    xhr.setRequestHeader('X-WP-Nonce', wpApiSettings.nonce);
+                },
+                data: data
+            }).done(function (response) {
+                if(response.resume){
+                    aralcoConfirmToContinueProcessing(response, form);
+                } else {
+                    aralcoContinueProcessing(response);
+                }
+            }).fail(function (response) {
+                aralcoSomethingWentWrong(response);
+            });
+        }
+
+        function aralcoConfirmToContinueProcessing(data, form) {
+            aralcoRemoveProgress();
+            $('body').append('<div class="load-blur has-question"><div><p>Incomplete sync found. Do you want to continue to old sync or start over?</p><button id="button-old">Use Old</button><button id="button-new">Use New</button><button>Cancel</button></div></div>');
+            $('.load-blur.has-question button').on('click', function () {
+                $('.load-blur.has-question').remove();
+            });
+            $('#button-old').on('click', aralcoAddProgress).on('click', aralcoContinueProcessing.bind(null, data));
+            $('#button-new').on('click', startSync.bind(null, true, form));
+        }
+
+        function aralcoContinueProcessing(data) {
+            console.log(data);
+            $('#aralco-status').text(data.statusText);
+            $('#aralco-progress-text').text(data.progress + '/' + data.total);
+            let barWidth = Math.round((data.progress / data.total) * 100);
+            if (barWidth === 0) barWidth = 1;
+            $('#aralco-progress').css('width', barWidth + '%');
+            if(data.complete > 0){
+                wpApiSettings.nonce = data.nonce;
+                $('#aralco-js-error-box').append('<div id="setting-error-aralco_woocommerce_connector_message" class="notice notice-success settings-error"><p><strong>Sync Completed Successfully</strong></p></div>');
+                setTimeout(aralcoRemoveProgress, 1000);
+            } else {
+                $.ajax({
+                    url: wpApiSettings.root + "aralco-wc/v1/admin/continue-sync",
+                    method: 'GET',
+                    beforeSend: function (xhr) {
+                        xhr.setRequestHeader('X-WP-Nonce', data.nonce);
+                    }
+                }).done(function (response) {
+                    aralcoContinueProcessing(response);
+                }).fail(function (response) {
+                    aralcoSomethingWentWrong(response);
+                });
+            }
+        }
+
+        function aralcoSomethingWentWrong(data) {
+            aralcoRemoveProgress();
+            let message = (data && data.responseJSON && data.responseJSON.message) ? data.responseJSON.message : 'An unknown error occurred';
+            $('#aralco-js-error-box').append('<div id="setting-error-aralco_woocommerce_connector_message" class="notice notice-error settings-error"><p><strong>An error has occurred:</strong> ' + message + '</p></div>');
+            console.error(data);
+        }
+
+        function aralcoAddProgress() {
+            $('body').append('<div class="load-blur has-progress"><div><p aria-hidden="true"><span class="dashicons dashicons-download blink"></span></p><div class="loading-bar"><div id="aralco-progress"></div><div id="aralco-progress-text"></div></div><h1 id="aralco-status">Initializing...</h1></div></div>');
+        }
+
+        function aralcoRemoveProgress() {
+            $('.load-blur.has-progress').remove();
+        }
     })
 </script>

@@ -9,7 +9,6 @@ require_once "aralco-util.php";
  * Provides helper methods that assist with registering and updating item in the WooCommerce Database.
  */
 class Aralco_Processing_Helper {
-
     /**
      * Checks for changes to products in Aralco and pulls them into WooCommerce.
      *
@@ -19,58 +18,116 @@ class Aralco_Processing_Helper {
      *
      * @param bool $everything passing true will pull every product instead of just changed products. THIS WILL TAKE
      * TIME
+     * @param null $products
      * @return bool|int|WP_Error|WP_Error[] Returns a int count of the records modified if the update completed successfully,
      * false if no update was due, and a WP_Error instance if something went wrong.
      */
-    static function sync_products($everything = false) {
+    static function sync_products($everything = false, $products = null) {
+        $chunked = !is_null($products);
         if ($everything) set_time_limit(0); // Required for the amount of data that needs to be fetched
         else set_time_limit(3600);
-        try{
-            $start_time = new DateTime();
-        } catch(Exception $e) {}
-        $options = get_option(ARALCO_SLUG . '_options');
-        if(!isset($options[ARALCO_SLUG . '_field_api_location']) || !isset($options[ARALCO_SLUG . '_field_api_token'])){
-            return new WP_Error(
-                ARALCO_SLUG . '_messages',
-                __('You must save the connection settings before you can sync any data.', ARALCO_SLUG)
-            );
+        if(!$chunked) {
+            try {
+                $start_time = new DateTime();
+            } catch (Exception $e) {
+            }
+            $options = get_option(ARALCO_SLUG . '_options');
+            if (!isset($options[ARALCO_SLUG . '_field_api_location']) || !isset($options[ARALCO_SLUG . '_field_api_token'])) {
+                return new WP_Error(
+                    ARALCO_SLUG . '_messages',
+                    __('You must save the connection settings before you can sync any data.', ARALCO_SLUG)
+                );
+            }
+
+            $result = Aralco_Processing_Helper::process_shipping_products();
+            if ($result instanceof WP_Error) return $result;
+
+            $lastSync = get_option(ARALCO_SLUG . '_last_sync');
+            if (!isset($lastSync) || $lastSync === false || $everything) {
+                $lastSync = date("Y-m-d\TH:i:s", mktime(0, 0, 0, 1, 1, 1900));
+            }
+
+            $server_time = Aralco_Connection_Helper::getServerTime();
+            if ($server_time instanceof WP_Error) {
+                return $server_time;
+            } else if (is_array($server_time) && isset($server_time['UtcOffset'])) {
+                $sign = ($server_time['UtcOffset'] > 0)? '+' : '-';
+                $server_time['UtcOffset'] -= 60; // Adds an extra hour to the sync to adjust for server de-syncs
+                if ($server_time['UtcOffset'] < 0) {
+                    $server_time['UtcOffset'] = $server_time['UtcOffset'] * -1;
+                }
+                $temp = DateTime::createFromFormat('Y-m-d\TH:i:s', $lastSync);
+                $temp->modify($sign . $server_time['UtcOffset'] . ' minutes');
+                $lastSync = $temp->format('Y-m-d\TH:i:s');
+            }
+
+            $result = Aralco_Processing_Helper::process_disabled_products();
+            if ($result instanceof WP_Error) return $result;
+
+            $products = Aralco_Connection_Helper::getProducts($lastSync);
+            if ($products instanceof WP_Error) return $products;
+        } else {
+            global $temp_shipping_product_code;
+            $temp_shipping_product_code = get_option(ARALCO_SLUG . '_shipping_product_code', null);
         }
 
+        if(is_array($products)){ // Got Data
+            // Sorting the array so items are processed in a consistent order (makes it easier for testing)
+            usort($products, function($a, $b){
+                return $a['ProductID'] <=> $b['ProductID'];
+            });
+
+            $count = 0;
+            $errors = array();
+            foreach($products as $item){
+                $count++;
+                $result = Aralco_Processing_Helper::process_item($item);
+                if(!$chunked) {
+                    if ($result instanceof WP_Error) {
+                        array_push($errors, $result);
+                    }
+                } else {
+                    if ($result instanceof WP_Error) return $result;
+                }
+            }
+
+            if(!$chunked) {
+                try{
+                    /** @noinspection PhpUndefinedVariableInspection */
+                    $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
+                    update_option(ARALCO_SLUG . '_last_sync_duration_products', $time_taken);
+                } catch(Exception $e) {}
+
+                update_option(ARALCO_SLUG . '_last_sync_product_count', $count);
+
+                if(count($errors) > 0){
+                    return $errors;
+                }
+            }
+        }
+        return true;
+    }
+
+    static function process_shipping_products() {
         /* Get and save shipping product code */
         $shipping_setting = Aralco_Connection_Helper::getSetting('ShippingProductCode');
         if ($shipping_setting instanceof WP_Error) return $shipping_setting;
         global $temp_shipping_product_code;
-        if (is_array($shipping_setting) && isset($shipping_setting['Value'])){
+        if (is_array($shipping_setting) && isset($shipping_setting['Value'])) {
             update_option(ARALCO_SLUG . '_shipping_product_code', $shipping_setting['Value']);
             $temp_shipping_product_code = $shipping_setting['Value'];
         } else {
             delete_option(ARALCO_SLUG . '_shipping_product_code');
             $temp_shipping_product_code = null;
         }
+        return true;
+    }
 
-
-        $lastSync = get_option(ARALCO_SLUG . '_last_sync');
-        if(!isset($lastSync) || $lastSync === false || $everything){
-            $lastSync = date("Y-m-d\TH:i:s", mktime(0, 0, 0, 1, 1, 1900));
-        }
-
-        $server_time = Aralco_Connection_Helper::getServerTime();
-        if($server_time instanceof WP_Error){
-            return $server_time;
-        } else if (is_array($server_time) && isset($server_time['UtcOffset'])) {
-            $sign = ($server_time['UtcOffset'] > 0) ? '+' : '-';
-            $server_time['UtcOffset'] -= 60; // Adds an extra hour to the sync to adjust for server de-syncs
-            if ($server_time['UtcOffset'] < 0) {
-                $server_time['UtcOffset'] = $server_time['UtcOffset'] * -1;
-            }
-            $temp = DateTime::createFromFormat('Y-m-d\TH:i:s', $lastSync);
-            $temp->modify($sign . $server_time['UtcOffset'] . ' minutes');
-            $lastSync = $temp->format('Y-m-d\TH:i:s');
-        }
-
+    static function process_disabled_products() {
         $result = Aralco_Connection_Helper::getDisabledProducts();
+        if ($result instanceof WP_Error) return $result;
 
-        if(is_array($result) && count($result)){ // Got Data
+        if(is_array($result) && count($result) > 0){ // Got Data
             global $wpdb;
             $products = $wpdb->get_results("SELECT post_id, meta_value FROM $wpdb->postmeta WHERE meta_key = '_aralco_id'");
             if(is_array($products) && count($products) > 0){
@@ -85,41 +142,8 @@ class Aralco_Processing_Helper {
                     $wpdb->query("UPDATE $wpdb->posts SET post_status = 'trash' WHERE ID IN ($list)");
                 }
             }
-        } else if ($result instanceof WP_Error) return $result;
-
-        $result = Aralco_Connection_Helper::getProducts($lastSync);
-
-        if(is_array($result)){ // Got Data
-            // Sorting the array so items are processed in a consistent order (makes it easier for testing)
-            usort($result, function($a, $b){
-                return $a['ProductID'] <=> $b['ProductID'];
-            });
-
-            $count = 0;
-            $errors = array();
-            foreach($result as $item){
-                $count++;
-                $result = Aralco_Processing_Helper::process_item($item);
-                if ($result instanceof WP_Error){
-                    array_push($errors, $result);
-                }
-//                if ($count >= 20) break; //TODO: Remove when done testing
-            }
-            try{
-                /** @noinspection PhpUndefinedVariableInspection */
-                $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
-                update_option(ARALCO_SLUG . '_last_sync_duration_products', $time_taken);
-            } catch(Exception $e) {}
-
-            update_option(ARALCO_SLUG . '_last_sync_product_count', $count);
-
-            if(count($errors) > 0){
-                return $errors;
-            }
-
-            return true;
         }
-        return $result;
+        return true;
     }
 
     /**
@@ -644,38 +668,43 @@ class Aralco_Processing_Helper {
      *
      * @param null|WC_Product[] $products the products to update. if null, all products based on last sync date
      * @param bool $everything if to ignore
+     * @param null $inventory
      * @return bool|WP_Error true if the inventory sync succeeded, otherwise an instance of WP_Error
      */
-    static function sync_stock($products = null, $everything = false){
-        if(is_array($products) && count($products) > 0) {
-            $inventory = Aralco_Connection_Helper::getProductStockByIDs($products);
-        } else {
-            if ($everything) set_time_limit(0);
-            $lastSync = get_option(ARALCO_SLUG . '_last_sync');
-            if(!isset($lastSync) || $lastSync === false || $everything){
-                $lastSync = date("Y-m-d\TH:i:s", mktime(0, 0, 0, 1, 1, 1900));
-            }
-
-            try{
-                $start_time = new DateTime();
-            } catch(Exception $e) {}
-
-            $server_time = Aralco_Connection_Helper::getServerTime();
-            if($server_time instanceof WP_Error){
-                return $server_time;
-            } else if (is_array($server_time) && isset($server_time['UtcOffset'])) {
-                $sign = ($server_time['UtcOffset'] > 0) ? '+' : '-';
-                $server_time['UtcOffset'] -= 60; // Adds an extra hour to the sync to adjust for server de-syncs
-                if ($server_time['UtcOffset'] < 0) {
-                    $server_time['UtcOffset'] = $server_time['UtcOffset'] * -1;
+    static function sync_stock($products = null, $everything = false, $inventory = null){
+        $chunked = !is_null($inventory);
+        if(!$chunked) {
+            if (is_array($products) && count($products) > 0) {
+                $inventory = Aralco_Connection_Helper::getProductStockByIDs($products);
+            } else {
+                if ($everything) set_time_limit(0);
+                $lastSync = get_option(ARALCO_SLUG . '_last_sync');
+                if (!isset($lastSync) || $lastSync === false || $everything) {
+                    $lastSync = date("Y-m-d\TH:i:s", mktime(0, 0, 0, 1, 1, 1900));
                 }
-                $temp = DateTime::createFromFormat('Y-m-d\TH:i:s', $lastSync);
-                $temp->modify($sign . $server_time['UtcOffset'] . ' minutes');
-                $lastSync = $temp->format('Y-m-d\TH:i:s');
+
+                try {
+                    $start_time = new DateTime();
+                } catch (Exception $e) {
+                }
+
+                $server_time = Aralco_Connection_Helper::getServerTime();
+                if ($server_time instanceof WP_Error) {
+                    return $server_time;
+                } else if (is_array($server_time) && isset($server_time['UtcOffset'])) {
+                    $sign = ($server_time['UtcOffset'] > 0)? '+' : '-';
+                    $server_time['UtcOffset'] -= 60; // Adds an extra hour to the sync to adjust for server de-syncs
+                    if ($server_time['UtcOffset'] < 0) {
+                        $server_time['UtcOffset'] = $server_time['UtcOffset'] * -1;
+                    }
+                    $temp = DateTime::createFromFormat('Y-m-d\TH:i:s', $lastSync);
+                    $temp->modify($sign . $server_time['UtcOffset'] . ' minutes');
+                    $lastSync = $temp->format('Y-m-d\TH:i:s');
+                }
+                $inventory = Aralco_Connection_Helper::getProductStock($lastSync);
             }
-            $inventory = Aralco_Connection_Helper::getProductStock($lastSync);
+            if ($inventory instanceof WP_Error) return $inventory;
         }
-        if($inventory instanceof WP_Error) return $inventory;
 
         $count = 0;
 
@@ -769,14 +798,17 @@ class Aralco_Processing_Helper {
             $count++;
         }
 
-        if(!is_array($products) || count($products) <= 0) {
-            update_option(ARALCO_SLUG . '_last_sync_stock_count', $count);
 
-            try{
-                /** @noinspection PhpUndefinedVariableInspection */
-                $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
-                update_option(ARALCO_SLUG . '_last_sync_duration_stock', $time_taken);
-            } catch(Exception $e) {}
+        if(!$chunked) {
+            if(!is_array($products) || count($products) <= 0) {
+                update_option(ARALCO_SLUG . '_last_sync_stock_count', $count);
+
+                try{
+                    /** @noinspection PhpUndefinedVariableInspection */
+                    $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
+                    update_option(ARALCO_SLUG . '_last_sync_duration_stock', $time_taken);
+                } catch(Exception $e) {}
+            }
         }
         return true;
     }
@@ -784,18 +816,23 @@ class Aralco_Processing_Helper {
     /**
      * Downloads and registers all the grids
      *
+     * @param null $raw_grids
      * @return true|WP_Error True if everything works, or WP_Error instance if something goes wrong
      */
-    static function sync_grids(){
-        try{
-            $start_time = new DateTime();
-        } catch(Exception $e) {}
+    static function sync_grids($raw_grids = null){
+        $chunked = !is_null($raw_grids);
+        if(!$chunked) {
+            try {
+                $start_time = new DateTime();
+            } catch (Exception $e) {}
 
-        // Get the grids.
-        $raw_grids = Aralco_Connection_Helper::getGrids();
-        if($raw_grids instanceof WP_Error || (isset($raw_grids[0]) && !isset($raw_grids[0]['CategoryId']))) {
-            return $raw_grids; // Something isn't right. Probably API error
+            // Get the grids.
+            $raw_grids = Aralco_Connection_Helper::getGrids();
+            if($raw_grids instanceof WP_Error || (isset($raw_grids[0]) && !isset($raw_grids[0]['CategoryId']))) {
+                return $raw_grids; // Something isn't right. Probably API error
+            }
         }
+
         if(!isset($raw_grids[0])){
             return true; // Nothing to do;
         }
@@ -874,24 +911,30 @@ class Aralco_Processing_Helper {
             $i1++;
         }
 
-        try{
-            $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
-            update_option(ARALCO_SLUG . '_last_sync_duration_grids', $time_taken);
-        } catch(Exception $e) {}
-        update_option(ARALCO_SLUG . '_last_sync_grid_count', $i1);
+        if(!$chunked) {
+            try{
+                $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
+                update_option(ARALCO_SLUG . '_last_sync_duration_grids', $time_taken);
+            } catch(Exception $e) {}
+            update_option(ARALCO_SLUG . '_last_sync_grid_count', $i1);
+        }
         return true;
     }
 
     /**
+     * @param null|array $departments
      * @return true|WP_Error
      */
-    static function sync_departments(){
+    static function sync_departments($departments = null){
         set_time_limit(3600);
-        try{
-            $start_time = new DateTime();
-        } catch(Exception $e) {}
-
-        $departments = Aralco_Connection_Helper::getDepartments();
+        $chunked = !is_null($departments);
+        if(!$chunked) {
+            try {
+                $start_time = new DateTime();
+            } catch (Exception $e) {}
+            $departments = Aralco_Connection_Helper::getDepartments();
+            if($departments instanceof WP_Error) return $departments;
+        }
 
         $count = 0;
         // Creation Pass (1/2)
@@ -962,20 +1005,25 @@ class Aralco_Processing_Helper {
             if ($result instanceof WP_Error) return $result;
         }
 
-        try{
-            $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
-            update_option(ARALCO_SLUG . '_last_sync_duration_departments', $time_taken);
-        } catch(Exception $e) {}
-        update_option(ARALCO_SLUG . '_last_sync_department_count', $count);
+        if(!$chunked) {
+            try {
+                $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
+                update_option(ARALCO_SLUG . '_last_sync_duration_departments', $time_taken);
+            } catch (Exception $e) {}
+            update_option(ARALCO_SLUG . '_last_sync_department_count', $count);
+        }
         return true;
     }
 
-    static function sync_groupings() {
-        try{
-            $start_time = new DateTime();
-        } catch(Exception $e) {}
+    static function sync_groupings($groupings_raw = null) {
+        $chunked = !is_null($groupings_raw);
+        if(!$chunked) {
+            try {
+                $start_time = new DateTime();
+            } catch (Exception $e) {}
+            $groupings_raw = Aralco_Connection_Helper::getGroupings();
+        }
 
-        $groupings_raw = Aralco_Connection_Helper::getGroupings();
         $groupings = array();
         foreach ($groupings_raw as $item) {
             if (!empty($item['GroupingListID'])){
@@ -994,7 +1042,6 @@ class Aralco_Processing_Helper {
         }
 
         $groupings = array_values($groupings);
-//        return $groupings;
 
         $count = 0;
         foreach($groupings as $index => $grouping){
@@ -1048,11 +1095,13 @@ class Aralco_Processing_Helper {
             $count++;
         }
 
-        try{
-            $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
-            update_option(ARALCO_SLUG . '_last_sync_duration_groupings', $time_taken);
-        } catch(Exception $e) {}
-        update_option(ARALCO_SLUG . '_last_sync_grouping_count', $count);
+        if(!$chunked) {
+            try {
+                $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
+                update_option(ARALCO_SLUG . '_last_sync_duration_groupings', $time_taken);
+            } catch (Exception $e) {}
+            update_option(ARALCO_SLUG . '_last_sync_grouping_count', $count);
+        }
         return true;
     }
 
