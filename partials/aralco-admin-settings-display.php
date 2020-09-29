@@ -403,6 +403,11 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
 
         function aralcoContinueProcessing(data) {
             console.log(data);
+            if(data.warnings && data.warnings.count > 0){
+                for(let i in data.warnings){
+                    aralcoAddWarning(data.warnings[i]);
+                }
+            }
             $('#aralco-status').text(data.statusText);
             $('#aralco-progress-text').text(data.progress + '/' + data.total);
             let barWidth = Math.round((data.progress / data.total) * 100);
@@ -425,6 +430,11 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
                     aralcoSomethingWentWrong(response);
                 });
             }
+        }
+
+        function aralcoAddWarning(warning) {
+            let message = (warning && warning.message) ? warning.message : 'An unknown warning occurred';
+            $('#aralco-js-error-box').append('<div id="setting-error-aralco_woocommerce_connector_message" class="notice notice-warning settings-error"><p><strong>Warn:</strong> ' + message + '</p></div>');
         }
 
         function aralcoSomethingWentWrong(data) {

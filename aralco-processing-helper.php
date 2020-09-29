@@ -82,12 +82,8 @@ class Aralco_Processing_Helper {
             foreach($products as $item){
                 $count++;
                 $result = Aralco_Processing_Helper::process_item($item);
-                if(!$chunked) {
-                    if ($result instanceof WP_Error) {
-                        array_push($errors, $result);
-                    }
-                } else {
-                    if ($result instanceof WP_Error) return $result;
+                if ($result instanceof WP_Error) {
+                    array_push($errors, $result);
                 }
             }
 
@@ -99,10 +95,10 @@ class Aralco_Processing_Helper {
                 } catch(Exception $e) {}
 
                 update_option(ARALCO_SLUG . '_last_sync_product_count', $count);
+            }
 
-                if(count($errors) > 0){
-                    return $errors;
-                }
+            if(count($errors) > 0){
+                return $errors;
             }
         }
         return true;

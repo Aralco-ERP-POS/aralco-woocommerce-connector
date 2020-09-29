@@ -126,6 +126,7 @@ function aralco_continue_sync() {
     $message = 'Unknown status';
     $complete = 0;
     $chunked_amount = intval(get_option(ARALCO_SLUG . '_sync_chunking', 20));
+    $warnings = [];
 
     if(count($chunk_data['queue']) > 0) {
         switch ($chunk_data['queue'][0]) {
@@ -221,6 +222,19 @@ function aralco_continue_sync() {
                     $chunk_to_process = array_slice($chunk_data['data'], 0, $chunked_amount);
                     $result = Aralco_Processing_Helper::sync_products(false, $chunk_to_process);
                     if($result instanceof WP_Error) return $result;
+                    if(is_array($result)){
+                        foreach ($result as $error){
+                            if(in_array($error->get_error_code(), [
+                                ARALCO_SLUG . '_dimension_not_enabled',
+                                ARALCO_SLUG . '_taxonomy_missing',
+                                ARALCO_SLUG . '_term_missing'
+                            ])){
+                                $warnings[] = $error;
+                            } else {
+                                return $error;
+                            }
+                        }
+                    }
                     $chunk_data['data'] = array_slice($chunk_data['data'], $chunked_amount);
                 }
                 $message = 'Syncing products...';
@@ -293,13 +307,19 @@ function aralco_continue_sync() {
         update_option(ARALCO_SLUG . '_chunking_data', $chunk_data);
     }
 
-    return [
+    $toReturn = [
         'complete' => $complete,
         'statusText' => $message,
         'progress' => $chunk_data['progress'],
         'total' => $chunk_data['total'],
         'nonce' => wp_create_nonce('wp_rest')
     ];
+
+    if(count($warnings) > 0){
+        $toReturn['warnings'] = $warnings;
+    }
+
+    return $toReturn;
 }
 
 function aralco_get_filters_for_department($data) {
