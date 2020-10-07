@@ -1322,7 +1322,8 @@ class Aralco_Processing_Helper {
     static function process_order($order_id, $just_return = false) {
         $options = get_option(ARALCO_SLUG . '_options');
 
-        if(!isset($options[ARALCO_SLUG . '_field_order_enabled']) || $options[ARALCO_SLUG . '_field_order_enabled'] != true) {
+        if((!isset($options[ARALCO_SLUG . '_field_order_enabled']) || $options[ARALCO_SLUG . '_field_order_enabled'] != true) &&
+            $just_return == false) {
             // Do nothing id you don't have orders enabled in settings
             return false;
         }
@@ -1352,24 +1353,31 @@ class Aralco_Processing_Helper {
             }
         }
 
+        $is_credit = $order->get_payment_method() == 'aralco_account_credit';
+
+        $payment = [
+            'paymentMethod'       => ($is_credit) ? 'Account' : 'CC-' . $options[ARALCO_SLUG . '_field_tender_code'] . '-****************',
+            'message'             => $order->get_payment_method_title(),
+            'status'              => '1',
+            'subTotal'            => strval($order->get_subtotal()),
+            'tax'                 => $order->get_total_tax(),
+            'shipping'            => $order->get_shipping_total(),
+            'total'               => $order->get_total(),
+            'totalPaid'           => ($order->is_paid()) ? $order->get_total() : '0.00',
+            'totalDue'            => ($order->is_paid()) ? '0.00' : $order->get_total()
+        ];
+
+        if(!$is_credit){
+            $payment['AuthorizationNumber'] = '12345'; // TODO: get real Auth Number
+            $payment['ReferenceNumber'] = '1234'; // TODO: get real Ref Number
+        }
+
         $aralco_order = array(
             'username'   => (isset($aralco_user['email'])) ? $aralco_user['email'] : $options[ARALCO_SLUG . '_field_default_order_email'],
             'storeId'    => $options[ARALCO_SLUG . '_field_store_id'],
             'items'      => array(),
             'weborderid' => $order_id,
-            'payment'         => array(
-                'paymentMethod'       => 'CC-' . $options[ARALCO_SLUG . '_field_tender_code'] . '-****************',
-                'message'             => $order->get_payment_method_title(),
-                'AuthorizationNumber' => '12345', // TODO: get real Auth Number
-                'ReferenceNumber'     => '1234', // TODO: get real Ref Number
-                'status'              => '1',
-                'subTotal'            => strval($order->get_subtotal()),
-                'tax'                 => $order->get_total_tax(),
-                'shipping'            => $order->get_shipping_total(),
-                'total'               => $order->get_total(),
-                'totalPaid'           => ($order->is_paid()) ? $order->get_total() : '0.00',
-                'totalDue'            => ($order->is_paid()) ? '0.00' : $order->get_total()
-            ),
+            'payment'         => $payment,
             'shippingAddress' => array(
                 'name'          => $order->get_shipping_first_name(),
                 'surname'       => $order->get_shipping_last_name(),
