@@ -66,11 +66,52 @@ Balance: {balance}', ARALCO_SLUG)
 
             $aralco_user = get_user_meta(get_current_user_id(), 'aralco_data', true);
 
-            if (!is_array($aralco_user) || !isset($aralco_user['creditLimit']) || $aralco_user['creditLimit'] <= 0) {
+            if (!is_array($aralco_user)) {
                 $order->update_status('failed', '');
-                $error_message = 'You have no credit limit. A credit limit greater then zero is required.';
+                $error_message = 'There was an issue retrieving you customer information. Please try again later.';
                 wc_add_notice(__('Payment error: ', ARALCO_SLUG) . $error_message, 'error');
                 return array();
+            }
+
+            $outstanding_invoices = Aralco_Connection_Helper::getInvoice($aralco_user['id']);
+            $creditAlertAmountDefault = Aralco_Connection_Helper::getSetting('CreditTimeLimitMinAmount');
+            $creditAlertDayDefault = Aralco_Connection_Helper::getSetting('CreditTimeLimitDay');
+
+            if($outstanding_invoices instanceof WP_Error) $outstanding_invoices = [];
+            $creditAlertAmountDefault = ($creditAlertAmountDefault instanceof WP_Error)? 0 : doubleval($creditAlertAmountDefault['Value']);
+            $creditAlertDayDefault = ($creditAlertDayDefault instanceof WP_Error)? 0 : intval($creditAlertDayDefault['Value']);
+
+            $aralco_user['creditLimit'] = $aralco_user['creditLimit'] ?? 0;
+            $aralco_user['accountBalance'] = $aralco_user['accountBalance'] ?? 0;
+            $aralco_user['creditAlertDay'] = $aralco_user['creditAlertDay'] ?? $creditAlertDayDefault ?? 0;
+            $aralco_user['creditAlertAmount'] = $aralco_user['creditAlertAmount'] ?? $creditAlertAmountDefault ?? 0;
+
+            if ($aralco_user['creditLimit'] <= 0 && $aralco_user['accountBalance'] >= 0) {
+                $order->update_status('failed', '');
+                $error_message = 'You have no credit. An account credit or a limit greater then zero is required.';
+                wc_add_notice(__('Payment error: ', ARALCO_SLUG) . $error_message, 'error');
+                return array();
+            }
+
+            if(is_array($outstanding_invoices) && count($outstanding_invoices) > 0){
+                $bal = array_sum(array_column($outstanding_invoices, 'balance'));
+                if($aralco_user['creditAlertAmount'] > 0 && $bal > $aralco_user['creditAlertAmount']) {
+                    if($aralco_user['creditAlertDay'] > 0) {
+                        foreach ($outstanding_invoices as $invoice) {
+                            if (new DateTime($invoice['date']) < (new DateTime())->modify('-' . $aralco_user['creditAlertDay'] . ' days')) {
+                                $order->update_status('failed', '');
+                                $error_message = 'You have an overdue credit balance. This must be paid first.';
+                                wc_add_notice(__('Payment error: ', ARALCO_SLUG) . $error_message, 'error');
+                                return array();
+                            }
+                        }
+                    } else {
+                        $order->update_status('failed', '');
+                        $error_message = 'You have an outstanding credit balance. This must be paid first.';
+                        wc_add_notice(__('Payment error: ', ARALCO_SLUG) . $error_message, 'error');
+                        return array();
+                    }
+                }
             }
 
             if (isset($aralco_user['accountBalance']) && $aralco_user['accountBalance'] > 0) {
