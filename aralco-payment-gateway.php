@@ -114,13 +114,6 @@ Balance: {balance}', ARALCO_SLUG)
                 }
             }
 
-            if (isset($aralco_user['accountBalance']) && $aralco_user['accountBalance'] > 0) {
-                $order->update_status('failed', '');
-                $error_message = 'You have an outstanding credit balance. This must be paid first.';
-                wc_add_notice(__('Payment error: ', ARALCO_SLUG) . $error_message, 'error');
-                return array();
-            }
-
             $total = $order->get_total();
             $limit = doubleval($aralco_user['creditLimit']);
             $bal = doubleval(isset($aralco_user['accountBalance']) && $aralco_user['accountBalance'] > 0 ? $aralco_user['accountBalance'] : 0);
