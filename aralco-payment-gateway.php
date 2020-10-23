@@ -41,12 +41,12 @@ function aralco_init_gateway_class() {
                 'description' => array(
                     'title' => __('Description', ARALCO_SLUG),
                     'type' => 'textarea',
-                    'description' => __('Payment method description that the customer will see on your website. Use {limit} and {balance} as placeholders for the customer\'s credit limit and balance.', ARALCO_SLUG),
+                    'description' => __('Payment method description that the customer will see on your website. Use {limit}, {balance} and {available} as placeholders for the customer\'s credit limit, balance, and remaining credit.', ARALCO_SLUG),
                     'desc_tip' => true,
                     'default' => __('Pay with your account credit.
-
 Limit: {limit}
-Balance: {balance}', ARALCO_SLUG)
+Balance: {balance}
+Available: {available}', ARALCO_SLUG)
                 )
             );
         }
@@ -145,9 +145,15 @@ Balance: {balance}', ARALCO_SLUG)
                 return apply_filters('woocommerce_gateway_description', "Oops! We were unable to fetch information about your account. Please report this!", $this->id);
             }
 
-            $limit = '<b>' . wc_price(isset($aralco_user['creditLimit']) && $aralco_user['creditLimit'] > 0 ? $aralco_user['creditLimit'] : 0) . '</b>';
-            $bal = '<b>' . wc_price(isset($aralco_user['accountBalance']) && $aralco_user['accountBalance'] > 0 ? $aralco_user['accountBalance'] : 0) . '</b>';
-            $description = str_replace(['{limit}', '{balance}'], [$limit, $bal], $this->description);
+            $limit = isset($aralco_user['creditLimit']) && $aralco_user['creditLimit'] > 0? $aralco_user['creditLimit'] : 0;
+            $bal = isset($aralco_user['accountBalance']) && $aralco_user['accountBalance'] > 0? $aralco_user['accountBalance'] : 0;
+            $available = $limit - $bal;
+
+            $wrap = function($amount) {
+                return '<b>' . wc_price($amount) . '</b>';
+            };
+
+            $description = str_replace(['{limit}', '{balance}', '{available}'], [$wrap($limit), $wrap($bal), $wrap($available)], $this->description);
 
             return apply_filters('woocommerce_gateway_description', $description, $this->id);
         }
