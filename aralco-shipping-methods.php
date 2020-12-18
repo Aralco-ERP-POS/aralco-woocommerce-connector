@@ -221,7 +221,7 @@ function aralco_validate_order($posted) {
 
                 if(count($products_out_of_stock) > 0) {
                     $message .= 'The following products are out of stock at the selected store:<ul><li>';
-                    $message .= implode($products_out_of_stock, '</li><li>') . '</li></ul>';
+                    $message .= implode('</li><li>', $products_out_of_stock) . '</li></ul>';
                 }
 
                 if(count($products_short_in_stock) > 0) {
