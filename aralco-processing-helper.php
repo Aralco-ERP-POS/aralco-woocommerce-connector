@@ -1312,6 +1312,31 @@ class Aralco_Processing_Helper {
     }
 
     /**
+     * Syncs stores
+     *
+     * @return true|WP_Error True if the stores were updated, or WP_Error if a problem occurred.
+     */
+    static function sync_stores() {
+        try{
+            $start_time = new DateTime();
+        } catch(Exception $e) {}
+
+        $stores = Aralco_Connection_Helper::getStores();
+        if ($stores instanceof WP_Error) return $stores;
+
+        update_option(ARALCO_SLUG . '_stores', $stores, true);
+        update_option(ARALCO_SLUG . '_last_sync_stores_count', count($stores));
+
+        try{
+            /** @noinspection PhpUndefinedVariableInspection */
+            $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
+            update_option(ARALCO_SLUG . '_last_sync_duration_stores', $time_taken);
+        } catch(Exception $e) {}
+
+        return true;
+    }
+
+    /**
      * Processes and submits the order to Aralco
      *
      * @param int $order_id the id of the order to submit to Aralco
@@ -1351,6 +1376,12 @@ class Aralco_Processing_Helper {
             if ($temp && !empty($temp)) { // If got aralco data
                 $aralco_user = $temp; // Set it
             }
+        }
+
+        $is_local_pickup = array_values($order->get_shipping_methods())[0]->get_method_id() == ARALCO_SLUG . '_pickup_shipping';
+        $pickup_store_id = 0;
+        if($is_local_pickup) {
+            $pickup_store_id = array_values($order->get_shipping_methods())[0]->get_meta('aralco_id');
         }
 
         $is_credit = $order->get_payment_method() == 'aralco_account_credit';
@@ -1403,6 +1434,11 @@ class Aralco_Processing_Helper {
             'UoMDivideByDecimal' => true
         );
 
+        if($is_local_pickup){
+            $aralco_order['FromStoreId'] = $pickup_store_id;
+            $aralco_order['ShipVia'] = 'Local Pickup';
+        }
+
         $customer_note = $order->get_customer_note();
         if(isset($customer_note) && !empty($customer_note)){
             $aralco_order['Remarks'] = $customer_note;
@@ -1439,7 +1475,7 @@ class Aralco_Processing_Helper {
             if ($quantity < 1) $quantity = 1;
             $quantity = round($quantity);
 
-            array_push($aralco_order['items'], array(
+            $item_to_push = array(
                 'productId'    => intval($aralco_product_id),
                 'code'         => $product->get_sku(),
                 'price'        => $price,
@@ -1454,7 +1490,12 @@ class Aralco_Processing_Helper {
                 'dimensionId2' => (is_array($grids) && isset($grids['dimensionId2']) && !empty($grids['dimensionId2'])) ? $grids['dimensionId2'] : null,
                 'dimensionId3' => (is_array($grids) && isset($grids['dimensionId3']) && !empty($grids['dimensionId3'])) ? $grids['dimensionId3'] : null,
                 'dimensionId4' => (is_array($grids) && isset($grids['dimensionId4']) && !empty($grids['dimensionId4'])) ? $grids['dimensionId4'] : null
-            ));
+            );
+            if($is_local_pickup){
+                $item_to_push['SellFromStoreID'] = $pickup_store_id;
+            }
+
+            array_push($aralco_order['items'], $item_to_push);
         }
 
         if (isset($just_return) && $just_return) return $aralco_order;

@@ -88,6 +88,10 @@ function aralco_new_sync() {
         $chunk_data['queue'][] = 'taxes_init';
         $chunk_data['queue'][] = 'taxes';
     }
+    if(isset($_GET['sync-stores'])){
+        $chunk_data['queue'][] = 'stores_init';
+        $chunk_data['queue'][] = 'stores';
+    }
 
     $lastSync = get_option(ARALCO_SLUG . '_last_sync');
     if(!isset($lastSync) || $lastSync === false || $everything){
@@ -293,6 +297,20 @@ function aralco_continue_sync() {
                 $chunk_data['total'] = 1;
                 $chunk_data['progress'] = 1;
                 $message = 'Syncing taxes...';
+                array_shift($chunk_data['queue']);
+                break;
+            case 'stores_init':
+                $chunk_data['total'] = 1;
+                $chunk_data['progress'] = 0;
+                $message = 'Preparing to sync stores...';
+                array_shift($chunk_data['queue']);
+                break;
+            case 'stores':
+                $result = Aralco_Processing_Helper::sync_stores();
+                if($result instanceof WP_Error) return $result;
+                $chunk_data['total'] = 1;
+                $chunk_data['progress'] = 1;
+                $message = 'Syncing stores...';
                 array_shift($chunk_data['queue']);
                 break;
         }

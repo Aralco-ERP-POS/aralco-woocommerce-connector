@@ -702,6 +702,51 @@ class Aralco_Connection_Helper {
     }
 
     /**
+     * Gets all the stores in Aralco
+     *
+     * @return array|WP_Error An array of customer groups, or WP_Error on an error
+     */
+    static function getStores(){
+        $options = get_option(ARALCO_SLUG . '_options');
+
+        $curl = curl_init();
+        curl_setopt($curl, CURLOPT_URL, $options[ARALCO_SLUG . '_field_api_location'] . 'api/Store?limit=0');
+        curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false); // Disable SSL verification
+        curl_setopt($curl, CURLOPT_RETURNTRANSFER, true); // Return instead of printing
+        curl_setopt($curl, CURLOPT_HTTPHEADER, array(
+            'Authorization: Basic ' . $options[ARALCO_SLUG . '_field_api_token']
+        )); // Basic Auth
+        $data = curl_exec($curl); // Get cURL result body
+        $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        curl_close($curl); // Close the cURL handler
+
+        if($http_code == 200){
+            if ($data === 'null' || empty($data)) {
+                return array();
+            }
+            return json_decode($data, true);
+        }
+
+        $message = "Unknown Error";
+        if(isset($data)){
+            if(strpos($data, '{') !== false){
+                $data = json_decode($data, true);
+                $message = $data['message'] . ' ';
+                if(isset($data['exceptionMessage'])){
+                    $message .= $data['exceptionMessage'];
+                }
+            }else{
+                $message = $data;
+            }
+        }
+
+        return new WP_Error(
+            ARALCO_SLUG . '_get_stores_error',
+            __('Stores Fetch Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG)
+        );
+    }
+
+    /**
      * Get an aralco user by a column name
      *
      * @param string $column valid columns are 'Id' or 'UserName'
