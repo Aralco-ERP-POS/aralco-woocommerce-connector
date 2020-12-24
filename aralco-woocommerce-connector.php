@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.17.0
+ * Version: 1.17.1
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.17.0
+ * @version 1.17.1
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -72,6 +72,12 @@ class Aralco_WooCommerce_Connector {
 
             // register custom product taxonomy
             add_action('admin_init', array($this, 'register_product_taxonomy'));
+
+            // register template overrides
+            add_filter('woocommerce_locate_template', array($this, 'woocommerce_locate_template'), 10, 3);
+
+            // register template scripts
+            add_action('wp_enqueue_scripts', array($this, 'enqueue_cart_checkout_scripts'));
 
             // register customer group price and UoM hooks
             add_filter('woocommerce_get_price_html', array($this, 'alter_price_display'), 100, 2);
@@ -504,6 +510,57 @@ class Aralco_WooCommerce_Connector {
 
         // show error/update messages
         require_once 'partials/aralco-admin-settings-display.php';
+    }
+
+    public function plugin_path() {
+        // gets the absolute path to this plugin directory
+        return untrailingslashit(plugin_dir_path(__FILE__));
+    }
+
+    public function woocommerce_locate_template($template, $template_name, $template_path) {
+        global $woocommerce;
+
+        $_template = $template;
+
+        if (!$template_path) $template_path = $woocommerce->template_url;
+
+        $plugin_path = $this->plugin_path() . '/woocommerce/';
+
+        // Look within passed path within the theme - this is priority
+        $template = locate_template(
+            array(
+                $template_path . $template_name,
+                $template_name
+            )
+        );
+
+        // Modification: Get the template from this plugin, if it exists
+        if (!$template && file_exists($plugin_path . $template_name))
+            $template = $plugin_path . $template_name;
+
+        // Use default template
+        if (!$template)
+            $template = $_template;
+
+        // Return what we found
+        return $template;
+    }
+
+    public function enqueue_cart_checkout_scripts() {
+        if(is_checkout() || is_cart()) {
+            if (!wp_script_is('select2')) {
+                wp_register_script('select2', WC()->plugin_url() . '/assets/js/select2/select2.full.min.js', array('jquery'), '4.0.3');
+                wp_enqueue_style('select2');
+            }
+            if(!wp_script_is('selectWoo')){
+                wp_register_script( 'selectWoo', WC()->plugin_url() . '/assets/js/selectWoo/selectWoo.full.min.js', array( 'jquery' ), '1.0.6' );
+                wp_enqueue_script( 'selectWoo');
+            }
+            if(!wp_script_is('store-select2')){
+                wp_register_script( 'store-select2', plugin_dir_url(__FILE__) . '/assets/js/store-select2.js', array( 'jquery' ), '1.0.0' );
+                wp_enqueue_script( 'store-select2');
+            }
+        }
     }
 
     /**

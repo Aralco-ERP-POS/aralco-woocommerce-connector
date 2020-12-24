@@ -87,7 +87,7 @@ function aralco_shipping_method() {
 
             foreach ($eligible_stores as $key => $eligible_store){
                 $store_key = array_search($eligible_store, array_column($stores, 'Id'));
-                if($store_key == false) continue;
+                if($store_key === false) continue;
 
                 $store = $stores[$store_key];
 
