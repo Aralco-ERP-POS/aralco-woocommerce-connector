@@ -7,21 +7,24 @@ jQuery(document).ready(function($) {
             allowClear: true,
             width: "100%"
         }).on('change.select2', function () {
-            console.log(this.value);
             $('.shipping_method[value="' + this.value + '"]').prop('checked', true).trigger('change');
         });
-        $('#show-local-shipping').on('change', function (e) {
+        let showLocalShipping = $('#show-local-shipping').on('change', function (e) {
             if(this.checked) {
                 $('.shipping_method').prop('checked', false);
                 $('#store-selector').show();
-                $('.woocommerce-shipping-destination').hide();
+                $('.woocommerce-shipping-destination, .woocommerce-shipping-calculator').hide();
             }
         })
+        if(showLocalShipping.prop('checked')){
+            $('.woocommerce-shipping-calculator').hide();
+            generateStoreInfo();
+        }
         $('.shipping_method').on('change', function (e) {
             if(this.checked) {
                 $('#show-local-shipping').prop('checked', false);
                 $('#store-selector').hide();
-                $('.woocommerce-shipping-destination').show();
+                $('.woocommerce-shipping-destination, .woocommerce-shipping-calculator').show();
             }
         })
         $('.checkout-button, #place_order').on('click', function (e) {
@@ -30,6 +33,14 @@ jQuery(document).ready(function($) {
                 $('#store-selector-error').text('Please select a store!').show();
             }
         })
+    }
+
+    function generateStoreInfo() {
+        let selectedOption = jQuery("#store-select option:selected");
+        if(selectedOption.length < 1) return;
+        let tel = selectedOption.data().phone.trim();
+        if (tel.length > 0) tel = '<br><br><b>Tel:</b> ' + tel;
+        $('#store-selector-address').html('Pickup from <b>' + selectedOption.data().address + '</b>' + tel).show();
     }
 
     function formatState (state) {

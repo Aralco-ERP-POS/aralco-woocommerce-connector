@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.17.1
+ * Version: 1.17.2
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.17.1
+ * @version 1.17.2
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -557,7 +557,7 @@ class Aralco_WooCommerce_Connector {
                 wp_enqueue_script( 'selectWoo');
             }
             if(!wp_script_is('store-select2')){
-                wp_register_script( 'store-select2', plugin_dir_url(__FILE__) . '/assets/js/store-select2.js', array( 'jquery' ), '1.0.0' );
+                wp_register_script( 'store-select2', plugin_dir_url(__FILE__) . '/assets/js/store-select2.js', array( 'jquery' ), '1.0.1' );
                 wp_enqueue_script( 'store-select2');
             }
         }

@@ -71,10 +71,12 @@ $calculator_text = '';
                     }))[0];
                     $store_radio_value = ARALCO_SLUG . '_pickup_shipping_store_' . $store['Id'];
                     $address = htmlspecialchars($store['StoreAddress']);
-                    printf('<option value="%1$s" data-address="%2$s" %3$s>%4$s</option>', $store_radio_value, $address, selected($store_radio_value, $chosen_method, false), $store['Name']);
+                    $phone = htmlspecialchars($store['Phone']);
+                    printf('<option value="%1$s" data-address="%2$s" data-phone="%3$s" %4$s>%5$s</option>', $store_radio_value, $address, $phone, selected($store_radio_value, $chosen_method, false), $store['Code'] . ' - ' . $store['Name']);
                 } ?></select></label>
             </p>
             <p id="store-selector-error" style="display: none; color: #f00;"></p>
+            <p id="store-selector-address" style="display: none;"></p>
             <?php if (is_cart() && !$pickup_selected) : ?>
                 <p class="woocommerce-shipping-destination">
                     <?php
