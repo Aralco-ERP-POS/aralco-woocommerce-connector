@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.17.2
+ * Version: 1.17.3
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.17.2
+ * @version 1.17.3
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -69,6 +69,10 @@ class Aralco_WooCommerce_Connector {
             // register login hook
             add_action('wp_login', array($this, 'customer_login'));
             add_action('aralco_refresh_user_data', array($this, 'customer_login'));
+            add_action('wp_loaded', array($this, 'intercept_lost_password_form'), 30);
+
+            // register login redirect hook
+            add_action('template_redirect', array($this, 'require_customer_login'));
 
             // register custom product taxonomy
             add_action('admin_init', array($this, 'register_product_taxonomy'));
@@ -208,6 +212,18 @@ class Aralco_WooCommerce_Connector {
             ARALCO_SLUG . '_global_section',
             [
                 'label_for' => ARALCO_SLUG . '_field_allow_backorders',
+                'required' => 'required'
+            ]
+        );
+
+        add_settings_field(
+            ARALCO_SLUG . '_field_login_required',
+            __('Require login to view store', ARALCO_SLUG),
+            array($this, 'field_checkbox'),
+            ARALCO_SLUG,
+            ARALCO_SLUG . '_global_section',
+            [
+                'label_for' => ARALCO_SLUG . '_field_login_required',
                 'required' => 'required'
             ]
         );
@@ -821,6 +837,56 @@ class Aralco_WooCommerce_Connector {
         unset($data['password']); // Saving this to the DB would be confusing since we don't use it.
 
         update_user_meta($user->ID, 'aralco_data', $data);
+    }
+
+    public function intercept_lost_password_form() {
+        if (isset($_POST['wc_reset_password'], $_POST['user_login'])) {
+
+            $errors = wc_get_notices('error');
+
+            if(count($errors) == 0) return;
+
+            $success = $this->import_user_from_aralco();
+
+            // If successful, redirect to my account with query arg set.
+            if ($success) {
+                wp_safe_redirect(add_query_arg('reset-link-sent', 'true', wc_get_account_endpoint_url('lost-password')));
+                exit;
+            }
+        }
+    }
+
+    public function import_user_from_aralco() {
+        $data = Aralco_Connection_Helper::getCustomer('UserName', $_POST['user_login']);
+
+        if (!$data || $data instanceof WP_Error) return false;
+
+        $user_data = array(
+            'first_name' => $data['name'],
+            'last_name' => $data['surname']
+        );
+
+        $username = wc_create_new_customer_username($_POST['user_login'], $user_data);
+        $password = wp_generate_password();
+
+        $user_id = wc_create_new_customer($_POST['user_login'], $username, $password, $user_data);
+        if ($user_id instanceof WP_Error) return false;
+
+        return WC_Shortcode_My_Account::retrieve_password();
+    }
+
+    public function require_customer_login(){
+        if(is_user_logged_in()) return;
+        $options = get_option(ARALCO_SLUG . '_options');
+        if($options !== false && isset($options[ARALCO_SLUG . '_field_login_required']) &&
+            $options[ARALCO_SLUG . '_field_login_required'] == '1') {
+            global $wp;
+            if(!is_page('my-account')) {
+                wp_redirect(home_url('my-account/my-account'));
+            } else if(!isset($_GET['password-reset']) && home_url($wp->request) . '/' != wc_lostpassword_url()) {
+                wc_add_notice(__('Have an account but don\'t know the password? Click <a href="' . wc_lostpassword_url() . '">HERE</a> to set a new one.', ARALCO_SLUG) , 'notice');
+            }
+        }
     }
 
     /**

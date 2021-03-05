@@ -56,7 +56,7 @@ $calculator_text = '';
                         ?>
                     </li>
                 <?php endforeach;
-                $pickup_selected = wp_startswith($chosen_method, ARALCO_SLUG . '_pickup');
+                $pickup_selected = strpos($chosen_method, ARALCO_SLUG . '_pickup') == 0;
                 if ($aralco_shipping_settings['enabled'] == 'yes' &&
                 count($available_methods) > 1) {
                     printf('<li><input type="radio" id="show-local-shipping" autocomplete="off" %1$s/><label for="show-local-shipping">%2$s</label></li>', $pickup_selected ? 'checked="checked"' : '', $aralco_shipping_settings['title']);

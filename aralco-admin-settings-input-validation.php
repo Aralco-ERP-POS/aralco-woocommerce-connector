@@ -182,6 +182,9 @@ function aralco_validate_config($input) {
     $input[ARALCO_SLUG . '_field_allow_backorders'] = (isset($input[ARALCO_SLUG . '_field_allow_backorders']) &&
         $input[ARALCO_SLUG . '_field_allow_backorders'] == 1) ? '1' : '0';
 
+    $input[ARALCO_SLUG . '_field_login_required'] = (isset($input[ARALCO_SLUG . '_field_login_required']) &&
+        $input[ARALCO_SLUG . '_field_login_required'] == 1) ? '1' : '0';
+
     $input[ARALCO_SLUG . '_field_sync_enabled'] = (isset($input[ARALCO_SLUG . '_field_sync_enabled']) &&
         $input[ARALCO_SLUG . '_field_sync_enabled'] == 1) ? '1' : '0';
 
