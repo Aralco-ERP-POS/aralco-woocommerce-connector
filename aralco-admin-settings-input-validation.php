@@ -188,6 +188,23 @@ function aralco_validate_config($input) {
     $input[ARALCO_SLUG . '_field_sync_enabled'] = (isset($input[ARALCO_SLUG . '_field_sync_enabled']) &&
         $input[ARALCO_SLUG . '_field_sync_enabled'] == 1) ? '1' : '0';
 
+    $input[ARALCO_SLUG . '_field_order_is_quote'] = (isset($input[ARALCO_SLUG . '_field_order_is_quote']) &&
+        $input[ARALCO_SLUG . '_field_order_is_quote'] == 1) ? '1' : '0';
+
+    $input[ARALCO_SLUG . '_field_order_is_quote'] = (isset($input[ARALCO_SLUG . '_field_order_is_quote']) &&
+        $input[ARALCO_SLUG . '_field_order_is_quote'] == 1) ? '1' : '0';
+
+    $input[ARALCO_SLUG . '_field_order_is_quote'] = (isset($input[ARALCO_SLUG . '_field_order_is_quote']) &&
+        $input[ARALCO_SLUG . '_field_order_is_quote'] == 1) ? '1' : '0';
+
+    $input[ARALCO_SLUG . '_field_reference_number_enabled'] =
+        (isset($input[ARALCO_SLUG . '_field_reference_number_enabled']) &&
+        $input[ARALCO_SLUG . '_field_reference_number_enabled'] == 1) ? '1' : '0';
+
+    $input[ARALCO_SLUG . '_field_reference_number_required'] =
+        (isset($input[ARALCO_SLUG . '_field_reference_number_required']) &&
+        $input[ARALCO_SLUG . '_field_reference_number_required'] == 1) ? '1' : '0';
+
     try{
         if($valid && $input[ARALCO_SLUG . '_field_sync_interval'] * $input[ARALCO_SLUG . '_field_sync_unit'] < 5){
             $valid = false;

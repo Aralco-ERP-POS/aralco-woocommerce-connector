@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.17.3
+ * Version: 1.17.4
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.17.3
+ * @version 1.17.4
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -60,7 +60,10 @@ class Aralco_WooCommerce_Connector {
             // register our options_page to the admin_menu action hook
             add_action('admin_menu', array($this, 'options_page'));
 
-            // register order complete hook
+            // register order hooks
+            add_action('woocommerce_after_order_notes', array($this, 'reference_number_checkout_field'));
+            add_action('woocommerce_checkout_process', array($this, 'reference_number_checkout_field_process'));
+            add_action('woocommerce_checkout_update_order_meta', array($this, 'reference_number_checkout_field_update_order_meta'));
             add_action('woocommerce_payment_complete', array($this, 'submit_order_to_aralco'), 10, 1);
 
             // register new user hook
@@ -330,17 +333,6 @@ class Aralco_WooCommerce_Connector {
 
         add_settings_field(
             ARALCO_SLUG . '_field_order_enabled',
-            __('Forward Orders to Aralco on Receipt of Payment', ARALCO_SLUG),
-            array($this, 'field_checkbox'),
-            ARALCO_SLUG,
-            ARALCO_SLUG . '_order_section',
-            [
-                'label_for' => ARALCO_SLUG . '_field_order_enabled'
-            ]
-        );
-
-        add_settings_field(
-            ARALCO_SLUG . '_field_order_enabled',
             __('Forward Orders', ARALCO_SLUG),
             array($this, 'field_checkbox'),
             ARALCO_SLUG,
@@ -349,6 +341,60 @@ class Aralco_WooCommerce_Connector {
                 'label_for' => ARALCO_SLUG . '_field_order_enabled',
                 'required' => 'required',
                 'description' => 'When checked, will forward any new orders to Aralco on Receipt of Payment'
+            ]
+        );
+
+        add_settings_field(
+            ARALCO_SLUG . '_field_order_is_quote',
+            __('Submit as Quote', ARALCO_SLUG),
+            array($this, 'field_checkbox'),
+            ARALCO_SLUG,
+            ARALCO_SLUG . '_order_section',
+            [
+                'label_for' => ARALCO_SLUG . '_field_order_is_quote',
+                'required' => 'required',
+                'description' => 'When checked, any new orders will be sent to Aralco as a Quote instead of an Order'
+            ]
+        );
+
+        add_settings_field(
+            ARALCO_SLUG . '_field_reference_number_enabled',
+            __('Ref Field Enabled', ARALCO_SLUG),
+            array($this, 'field_checkbox'),
+            ARALCO_SLUG,
+            ARALCO_SLUG . '_order_section',
+            [
+                'label_for' => ARALCO_SLUG . '_field_reference_number_enabled',
+                'required' => 'required',
+                'description' => 'When checked, the reference number input field is shown to the customer when checking out.'
+            ]
+        );
+
+        add_settings_field(
+            ARALCO_SLUG . '_field_reference_number_required',
+            __('Ref Field Required', ARALCO_SLUG),
+            array($this, 'field_checkbox'),
+            ARALCO_SLUG,
+            ARALCO_SLUG . '_order_section',
+            [
+                'label_for' => ARALCO_SLUG . '_field_reference_number_required',
+                'required' => 'required',
+                'description' => 'When checked, the reference number input field is required to be filled to check out.'
+            ]
+        );
+
+        add_settings_field(
+            ARALCO_SLUG . '_field_reference_number_label',
+            __('Ref Number Label', ARALCO_SLUG),
+            array($this, 'field_input'),
+            ARALCO_SLUG,
+            ARALCO_SLUG . '_order_section',
+            [
+                'type' => 'text',
+                'label_for' => ARALCO_SLUG . '_field_reference_number_label',
+                'class' => ARALCO_SLUG . '_row',
+                'placeholder' => 'Claim #',
+                'description' => 'What the reference number field label should be. Leave blank to use \'Reference #\'.'
             ]
         );
 
@@ -1410,6 +1456,59 @@ $repeated_snippet
 
         wc_add_notice(sprintf(__('Sorry, but "%s" appears to be missing tax info. Please report this to the site administrator.', ARALCO_SLUG), $item->object['data']->get_name()), 'error');
         return $item_tax_rates;
+    }
+
+    /**
+     * Add the field to the checkout
+     */
+
+    public function reference_number_checkout_field($checkout) {
+        $options = get_option(ARALCO_SLUG . '_options');
+
+        if (!isset($options[ARALCO_SLUG . '_field_reference_number_enabled']) ||
+            $options[ARALCO_SLUG . '_field_reference_number_enabled'] != '1') return;
+
+        $title = (isset($options[ARALCO_SLUG . '_field_reference_number_label'])) ?
+            $options[ARALCO_SLUG . '_field_reference_number_label'] : __('Reference #', ARALCO_SLUG);
+
+        echo '<div id="' . ARALCO_SLUG . '-reference-number-field__field-wrapper">';
+
+        $perams = array(
+            'type' => 'text',
+            'class' => array('reference-number-field form-row-wide'),
+            'label' => $title
+        );
+
+        if(isset($options[ARALCO_SLUG . '_field_reference_number_required']) && $options[ARALCO_SLUG . '_field_reference_number_required'] == "1"){
+            $perams['required'] = true;
+        }
+
+        woocommerce_form_field(ARALCO_SLUG . '_reference_number', $perams,
+            $checkout->get_value(ARALCO_SLUG . '_reference_number'));
+
+        echo '</div>';
+    }
+
+    public function reference_number_checkout_field_process() {
+        $options = get_option(ARALCO_SLUG . '_options');
+        if (!isset($options[ARALCO_SLUG . '_field_reference_number_enabled']) ||
+            !isset($options[ARALCO_SLUG . '_field_reference_number_required']) ||
+            $options[ARALCO_SLUG . '_field_reference_number_enabled'] != '1' ||
+            $options[ARALCO_SLUG . '_field_reference_number_required'] != '1') return;
+        if (empty($_POST[ARALCO_SLUG . '_reference_number'])) {
+            $title = (isset($options[ARALCO_SLUG . '_field_reference_number_label'])) ?
+                $options[ARALCO_SLUG . '_field_reference_number_label'] : __('Reference #', ARALCO_SLUG);
+            wc_add_notice($title . __(' is required.', ARALCO_SLUG), 'error');
+        }
+    }
+
+    function reference_number_checkout_field_update_order_meta($order_id) {
+        $options = get_option(ARALCO_SLUG . '_options');
+        if (!isset($options[ARALCO_SLUG . '_field_reference_number_enabled']) ||
+            $options[ARALCO_SLUG . '_field_reference_number_enabled'] != '1') return;
+        if (!empty($_POST[ARALCO_SLUG . '_reference_number'])) {
+            update_post_meta($order_id, ARALCO_SLUG . '_reference_number', sanitize_text_field($_POST[ARALCO_SLUG . '_reference_number']));
+        }
     }
 
     /**

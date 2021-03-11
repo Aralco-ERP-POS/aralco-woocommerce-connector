@@ -1431,8 +1431,19 @@ class Aralco_Processing_Helper {
                 'country'       => $order->get_billing_country(),
                 'zipPostalCode' => $order->get_billing_postcode()
             ),
+            'TransType' => '7',
             'UoMDivideByDecimal' => true
         );
+
+        if(isset($options[ARALCO_SLUG . '_field_order_is_quote']) &&
+            $options[ARALCO_SLUG . '_field_order_is_quote'] == '1') {
+            $aralco_order['TransType'] = '8';
+        }
+
+        if(isset($options[ARALCO_SLUG . '_field_reference_number_enabled']) &&
+            $options[ARALCO_SLUG . '_field_reference_number_enabled'] == '1') {
+            $aralco_order['ReferenceNo'] = $order->get_meta(ARALCO_SLUG . '_reference_number');
+        }
 
         if($is_local_pickup){
             $aralco_order['FromStoreId'] = $pickup_store_id;
