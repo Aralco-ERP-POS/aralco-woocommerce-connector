@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.17.5
+ * Version: 1.17.6
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.17.5
+ * @version 1.17.6
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -67,6 +67,15 @@ class Aralco_WooCommerce_Connector {
             add_action('woocommerce_payment_complete', array($this, 'submit_order_to_aralco'), 10, 1);
             add_action('woocommerce_order_details_before_order_table', array($this, 'show_reference_number'), 10, 1);
             add_action('woocommerce_email_order_details', array($this, 'show_reference_number_email'), 10, 4);
+            add_filter('woocommerce_endpoint_order-pay_title', array($this, 'endpoint_order_pay_title'), 10, 2);
+            add_filter('woocommerce_endpoint_order-received_title', array($this, 'endpoint_order_received_title'), 10, 2);
+            add_filter('woocommerce_endpoint_orders_title', array($this, 'endpoint_orders_title'), 10, 2);
+            add_filter('woocommerce_endpoint_view-order_title', array($this, 'endpoint_view_order_title'), 10, 2);
+            add_filter('woocommerce_account_menu_items', array($this, 'account_menu_items'), 10, 2);
+            add_filter('woocommerce_my_account_my_orders_columns', array($this, 'my_account_my_orders_columns'), 10, 1);
+            add_filter('woocommerce_order_button_text', array($this, 'order_button_text'), 10, 1);
+            add_filter('woocommerce_checkout_fields', array($this, 'checkout_fields'), 10, 1);
+            add_filter('woocommerce_thankyou_order_received_text', array($this, 'thankyou_order_received_text'), 10, 2);
 
             // register new user hook
             add_action('user_register', array($this, 'new_customer'));
@@ -1542,9 +1551,102 @@ $repeated_snippet
                 echo $title . $order->get_meta(ARALCO_SLUG . '_reference_number') . '
 ';
             } else {
-                echo '<p>' . $title . '<b class="reference-number">' . $order->get_meta(ARALCO_SLUG . '_reference_number') . '</b></p>';
+                echo '<p style="font-size:24px;">' . $title . '<b>' . $order->get_meta(ARALCO_SLUG . '_reference_number') . '</b></p>';
             }
         }
+    }
+
+    public function endpoint_order_pay_title($title, $endpoint){
+        $options = get_option(ARALCO_SLUG . '_options');
+        if(isset($options[ARALCO_SLUG . '_field_reference_number_enabled']) &&
+            $options[ARALCO_SLUG . '_field_reference_number_enabled'] == '1') {
+            $title = __( 'Pay for quote', 'woocommerce' );
+        }
+        return $title;
+    }
+
+    public function endpoint_order_received_title($title, $endpoint){
+        $options = get_option(ARALCO_SLUG . '_options');
+        if(isset($options[ARALCO_SLUG . '_field_reference_number_enabled']) &&
+            $options[ARALCO_SLUG . '_field_reference_number_enabled'] == '1') {
+            $title = __( 'Quote created', 'woocommerce' );
+        }
+        return $title;
+    }
+
+    public function endpoint_orders_title($title, $endpoint){
+        $options = get_option(ARALCO_SLUG . '_options');
+        if(isset($options[ARALCO_SLUG . '_field_reference_number_enabled']) &&
+            $options[ARALCO_SLUG . '_field_reference_number_enabled'] == '1') {
+            global $wp;
+            if (!empty($wp->query_vars['orders'])) {
+                /* translators: %s: page */
+                $title = sprintf(__('Quotes (page %d)', ARALCO_SLUG), intval($wp->query_vars['orders']));
+            } else {
+                $title = __('Quotes', ARALCO_SLUG);
+            }
+        }
+        return $title;
+    }
+
+    public function endpoint_view_order_title($title, $endpoint){
+        $options = get_option(ARALCO_SLUG . '_options');
+        if(isset($options[ARALCO_SLUG . '_field_reference_number_enabled']) &&
+            $options[ARALCO_SLUG . '_field_reference_number_enabled'] == '1') {
+            global $wp;
+            $order = wc_get_order($wp->query_vars['view-order']);
+            /* translators: %s: order number */
+            $title = ($order)? sprintf(__('Quote #%s', ARALCO_SLUG), $order->get_order_number()) : '';
+        }
+        return $title;
+    }
+
+    public function account_menu_items($items){
+        $options = get_option(ARALCO_SLUG . '_options');
+        if(isset($options[ARALCO_SLUG . '_field_reference_number_enabled']) &&
+            $options[ARALCO_SLUG . '_field_reference_number_enabled'] == '1') {
+            $items['orders'] = __('Quotes', ARALCO_SLUG);
+        }
+        return $items;
+    }
+
+    public function my_account_my_orders_columns($items){
+        $options = get_option(ARALCO_SLUG . '_options');
+        if(isset($options[ARALCO_SLUG . '_field_reference_number_enabled']) &&
+            $options[ARALCO_SLUG . '_field_reference_number_enabled'] == '1') {
+            $items['order-number'] = esc_html__('Quote', ARALCO_SLUG);
+        }
+        return $items;
+    }
+
+    public function order_button_text($text) {
+        $options = get_option(ARALCO_SLUG . '_options');
+        if (isset($options[ARALCO_SLUG . '_field_reference_number_enabled']) &&
+            $options[ARALCO_SLUG . '_field_reference_number_enabled'] == '1') {
+            $text = __('Create quote', ARALCO_SLUG);
+        }
+        return $text;
+    }
+
+    public function checkout_fields($fields) {
+        $options = get_option(ARALCO_SLUG . '_options');
+        if (isset($options[ARALCO_SLUG . '_field_reference_number_enabled']) &&
+            $options[ARALCO_SLUG . '_field_reference_number_enabled'] == '1') {
+            $fields['order']['order_comments']['label'] = __('Quote notes', ARALCO_SLUG);
+            $fields['order']['order_comments']['placeholder'] = esc_attr__(
+                'Notes about your quote, e.g. special notes for delivery.',
+                ARALCO_SLUG);
+        }
+        return $fields;
+    }
+
+    public function thankyou_order_received_text($text, $order) {
+        $options = get_option(ARALCO_SLUG . '_options');
+        if (isset($options[ARALCO_SLUG . '_field_reference_number_enabled']) &&
+            $options[ARALCO_SLUG . '_field_reference_number_enabled'] == '1') {
+            $text = esc_html__( 'Thank you. Your quote has been created.', 'woocommerce' );
+        }
+        return $text;
     }
 
     /**
