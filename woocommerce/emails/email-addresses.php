@@ -32,7 +32,7 @@ if($is_aralco_local_pickup) {
         return $store['Id'] === intval($aralco_store_id);
     });
     if(count($store) == 0) $is_aralco_local_pickup = false;
-    $store = $store[0];
+    $store = array_values($store)[0];
 }
 
 ?><table id="addresses" cellspacing="0" cellpadding="0" style="width: 100%; vertical-align: top; margin-bottom: 40px; padding:0;" border="0">

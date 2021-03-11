@@ -37,7 +37,7 @@ if($is_aralco_local_pickup) {
         return $store['Id'] === intval($aralco_store_id);
     });
     if(count($store) == 0) $is_aralco_local_pickup = false;
-    $store = $store[0];
+    $store = array_values($store)[0];
 }
 
 if($is_aralco_local_pickup) {

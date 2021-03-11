@@ -65,6 +65,8 @@ class Aralco_WooCommerce_Connector {
             add_action('woocommerce_checkout_process', array($this, 'reference_number_checkout_field_process'));
             add_action('woocommerce_checkout_update_order_meta', array($this, 'reference_number_checkout_field_update_order_meta'));
             add_action('woocommerce_payment_complete', array($this, 'submit_order_to_aralco'), 10, 1);
+            add_action('woocommerce_order_details_before_order_table', array($this, 'show_reference_number'), 10, 1);
+            add_action('woocommerce_email_order_details', array($this, 'show_reference_number_email'), 10, 4);
 
             // register new user hook
             add_action('user_register', array($this, 'new_customer'));
@@ -1518,6 +1520,31 @@ $repeated_snippet
      */
     public function submit_order_to_aralco($order_id) {
         Aralco_Processing_Helper::process_order($order_id);
+    }
+
+    public function show_reference_number($order) {
+        $options = get_option(ARALCO_SLUG . '_options');
+        if(isset($options[ARALCO_SLUG . '_field_reference_number_enabled']) &&
+            $options[ARALCO_SLUG . '_field_reference_number_enabled'] == '1') {
+            $title = (isset($options[ARALCO_SLUG . '_field_reference_number_label'])) ?
+                $options[ARALCO_SLUG . '_field_reference_number_label'] : __('Reference #', ARALCO_SLUG);
+            echo '<p>' . $title . '<mark class="reference-number">' . $order->get_meta(ARALCO_SLUG . '_reference_number') . '</mark></p>';
+        }
+    }
+
+    public function show_reference_number_email($order, $sent_to_admin, $plain_text, $email){
+        $options = get_option(ARALCO_SLUG . '_options');
+        if(isset($options[ARALCO_SLUG . '_field_reference_number_enabled']) &&
+            $options[ARALCO_SLUG . '_field_reference_number_enabled'] == '1') {
+            $title = (isset($options[ARALCO_SLUG . '_field_reference_number_label'])) ?
+                $options[ARALCO_SLUG . '_field_reference_number_label'] : __('Reference #', ARALCO_SLUG);
+            if($plain_text) {
+                echo $title . $order->get_meta(ARALCO_SLUG . '_reference_number') . '
+';
+            } else {
+                echo '<p>' . $title . '<b class="reference-number">' . $order->get_meta(ARALCO_SLUG . '_reference_number') . '</b></p>';
+            }
+        }
     }
 
     /**
