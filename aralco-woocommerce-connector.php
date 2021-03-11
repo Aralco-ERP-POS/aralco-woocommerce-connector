@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.17.4
+ * Version: 1.17.5
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.17.4
+ * @version 1.17.5
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -930,7 +930,7 @@ class Aralco_WooCommerce_Connector {
             if(!is_page('my-account')) {
                 wp_redirect(home_url('my-account/my-account'));
             } else if(!isset($_GET['password-reset']) && home_url($wp->request) . '/' != wc_lostpassword_url()) {
-                wc_add_notice(__('Have an account but don\'t know the password? Click <a href="' . wc_lostpassword_url() . '">HERE</a> to set a new one.', ARALCO_SLUG) , 'notice');
+//                wc_add_notice(__('Have an account but don\'t know the password? Click <a href="' . wc_lostpassword_url() . '">HERE</a> to set a new one.', ARALCO_SLUG) , 'notice');
             }
         }
     }
