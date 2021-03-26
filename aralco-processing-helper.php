@@ -1385,23 +1385,31 @@ class Aralco_Processing_Helper {
         }
 
         $is_credit = $order->get_payment_method() == 'aralco_account_credit';
+        $is_quote = isset($options[ARALCO_SLUG . '_field_order_is_quote']) && $options[ARALCO_SLUG . '_field_order_is_quote'] == '1';
 
         $payment = [
-            'paymentMethod'       => ($is_credit) ? 'Account' : 'CC-' . $options[ARALCO_SLUG . '_field_tender_code'] . '-****************',
-            'message'             => $order->get_payment_method_title(),
-            'status'              => '1',
             'subTotal'            => strval($order->get_subtotal()),
             'tax'                 => $order->get_total_tax(),
             'shipping'            => $order->get_shipping_total(),
             'total'               => $order->get_total(),
-            'totalPaid'           => ($order->is_paid()) ? $order->get_total() : '0.00',
-            'totalDue'            => ($order->is_paid()) ? '0.00' : $order->get_total()
+            'status'              => '1'
         ];
 
-        if(!$is_credit){
+        if($is_quote){
+            $payment['totalPaid'] = '0.00';
+            $payment['totalDue'] = $order->get_total();
+        } else {
+            $payment['paymentMethod'] = ($is_credit) ? 'Account' : 'CC-' . $options[ARALCO_SLUG . '_field_tender_code'] . '-****************';
+            $payment['message'] = $order->get_payment_method_title();
+            $payment['totalPaid'] = ($order->is_paid()) ? $order->get_total() : '0.00';
+            $payment['totalDue'] = ($order->is_paid()) ? '0.00' : $order->get_total();
+        }
+
+        if(!$is_credit && !$is_quote){
             $payment['AuthorizationNumber'] = '12345'; // TODO: get real Auth Number
             $payment['ReferenceNumber'] = '1234'; // TODO: get real Ref Number
         }
+
 
         $aralco_order = array(
             'username'   => (isset($aralco_user['email'])) ? $aralco_user['email'] : $options[ARALCO_SLUG . '_field_default_order_email'],

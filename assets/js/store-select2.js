@@ -38,19 +38,19 @@ jQuery(document).ready(function($) {
     function generateStoreInfo() {
         let selectedOption = jQuery("#store-select option:selected");
         if(selectedOption.length < 1) return;
-        let tel = selectedOption.data().phone.trim();
+        let tel = (selectedOption.data().phone ?? '').trim();
         if (tel.length > 0) tel = '<br><br><b>Tel:</b> ' + tel;
         $('#store-selector-address').html('Pickup from <b>' + selectedOption.data().address + '</b>' + tel).show();
     }
 
     function formatState (state) {
         if (!state.id) return state.text;
-        console.log(state);
+        // console.log(state);
         return $("<span></span>").html('<b>' + state.text + '</b><span class="truncate">' + state.element.dataset.address + '</span>');
     }
 
     function matchCustom(params, data) {
-        console.log(data);
+        // console.log(data);
         // If there are no search terms, return all of the data
         if ($.trim(params.term) === '') {
             return data;

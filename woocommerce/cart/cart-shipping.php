@@ -46,9 +46,18 @@ $calculator_text = '';
                     } ?>
                     <li style="<?php echo $li_style ?>">
                         <?php if (1 < count($available_methods)) {
-                            printf('<input type="radio" name="shipping_method[%1$d]" data-index="%1$d" id="shipping_method_%1$d_%2$s" value="%3$s" class="%4$s" autocomplete="off" %5$s />', $index, esc_attr(sanitize_title($method->id)), esc_attr($method->id), implode(' ', $input_classes), checked($method->id, $chosen_method, false)); // WPCS: XSS ok.
+                            printf('<input type="radio" name="shipping_method[%1$d]" data-index="%1$d" id="shipping_method_%1$d_%2$s" value="%3$s" class="%4$s" autocomplete="off" %5$s />',
+                                $index,
+                                esc_attr(sanitize_title($method->id)),
+                                esc_attr($method->id),
+                                implode(' ', $input_classes),
+                                checked($method->id, $chosen_method, false)); // WPCS: XSS ok.
                         } else {
-                            printf('<input type="hidden" name="shipping_method[%1$d]" data-index="%1$d" id="shipping_method_%1$d_%2$s" value="%3$s" class="%4$s" />', $index, esc_attr(sanitize_title($method->id)), esc_attr($method->id), implode(' ', $input_classes)); // WPCS: XSS ok.
+                            printf('<input type="hidden" name="shipping_method[%1$d]" data-index="%1$d" id="shipping_method_%1$d_%2$s" value="%3$s" class="%4$s" />',
+                                $index,
+                                esc_attr(sanitize_title($method->id)),
+                                esc_attr($method->id),
+                                implode(' ', $input_classes)); // WPCS: XSS ok.
                         }
                         printf('<label for="shipping_method_%1$s_%2$s">%3$s</label>', $index, esc_attr(sanitize_title($method->id)), wc_cart_totals_shipping_method_label($method)); // WPCS: XSS ok.
 
@@ -56,10 +65,12 @@ $calculator_text = '';
                         ?>
                     </li>
                 <?php endforeach;
-                $pickup_selected = strpos($chosen_method, ARALCO_SLUG . '_pickup') == 0;
+                $pickup_selected = strpos($chosen_method, ARALCO_SLUG . '_pickup') === 0;
                 if ($aralco_shipping_settings['enabled'] == 'yes' &&
                 count($available_methods) > 1) {
-                    printf('<li><input type="radio" id="show-local-shipping" autocomplete="off" %1$s/><label for="show-local-shipping">%2$s</label></li>', $pickup_selected ? 'checked="checked"' : '', $aralco_shipping_settings['title']);
+                    printf('<li><input type="radio" id="show-local-shipping" autocomplete="off" %1$s/><label for="show-local-shipping">%2$s</label></li>',
+                        checked($pickup_selected, true, false),
+                        $aralco_shipping_settings['title']);
                 } ?>
             </ul>
             <p id="store-selector" <?php echo ($pickup_selected ? '' : 'style="display: none;"') ?>>
