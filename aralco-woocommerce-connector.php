@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.17.7
+ * Version: 1.17.8
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.17.7
+ * @version 1.17.8
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -26,11 +26,11 @@ define('ARALCO_SLUG', 'aralco_woocommerce_connector');
 $current_aralco_user = array();
 $aralco_groups = array();
 
-require_once "aralco-util.php";
-require_once "aralco-admin-settings-input-validation.php";
-require_once "aralco-connection-helper.php";
-require_once "aralco-processing-helper.php";
-require_once "aralco-shipping-methods.php";
+require_once 'aralco-util.php';
+require_once 'aralco-admin-settings-input-validation.php';
+require_once 'aralco-connection-helper.php';
+require_once 'aralco-processing-helper.php';
+require_once 'aralco-shipping-methods.php';
 
 /**
  * Class Aralco_WooCommerce_Connector
@@ -53,6 +53,8 @@ class Aralco_WooCommerce_Connector {
         if (in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get_option('active_plugins')))) {
             // trigger add product sync to cron (will only do if enabled)
             $this->schedule_sync();
+
+            add_action('woocommerce_email_classes', array($this, 'register_email_classes'));
 
             // register our settings_init to the admin_init action hook
             add_action('admin_init', array($this, 'settings_init'));
@@ -172,6 +174,23 @@ class Aralco_WooCommerce_Connector {
         global $aralco_groups;
         $aralco_groups = get_option(ARALCO_SLUG . '_customer_groups', true);
         if(!is_array($aralco_groups)) $aralco_groups = array();
+    }
+
+    /**
+     * Register email class overrides
+     */
+    public function register_email_classes($email_classes) {
+        $email_classes['WC_Email_New_Order']                 = require __DIR__ . '/woocommerce/emails/class-wc-email-new-order.php';
+        $email_classes['WC_Email_Cancelled_Order']           = require __DIR__ . '/woocommerce/emails/class-wc-email-cancelled-order.php';
+        $email_classes['WC_Email_Failed_Order']              = require __DIR__ . '/woocommerce/emails/class-wc-email-failed-order.php';
+        $email_classes['WC_Email_Customer_On_Hold_Order']    = require __DIR__ . '/woocommerce/emails/class-wc-email-customer-on-hold-order.php';
+        $email_classes['WC_Email_Customer_Processing_Order'] = require __DIR__ . '/woocommerce/emails/class-wc-email-customer-processing-order.php';
+        $email_classes['WC_Email_Customer_Completed_Order']  = require __DIR__ . '/woocommerce/emails/class-wc-email-customer-completed-order.php';
+        $email_classes['WC_Email_Customer_Refunded_Order']   = require __DIR__ . '/woocommerce/emails/class-wc-email-customer-refunded-order.php';
+//        $email_classes['WC_Email_Customer_Invoice']          = require __DIR__ . '/woocommerce/emails/class-wc-email-customer-invoice.php';
+        $email_classes['WC_Email_Customer_Note']             = require __DIR__ . '/woocommerce/emails/class-wc-email-customer-note.php';
+
+        return $email_classes;
     }
 
     /**
