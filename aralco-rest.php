@@ -36,6 +36,30 @@ function aralco_register_rest_routs() {
             'callback' => 'aralco_continue_sync'
         )
     );
+
+    register_rest_route(
+        'aralco-wc/v1',
+        '/cart/apply-points',
+        array(
+            'methods' => 'GET',
+            'permission_callback' => function() {
+                return is_user_logged_in();
+            },
+            'callback' => 'aralco_apply_points_to_cart'
+        )
+    );
+
+    register_rest_route(
+        'aralco-wc/v1',
+        '/cart/remove-points',
+        array(
+            'methods' => 'GET',
+            'permission_callback' => function() {
+                return is_user_logged_in();
+            },
+            'callback' => 'aralco_remove_points_to_cart'
+        )
+    );
 }
 
 function aralco_new_sync() {
@@ -381,4 +405,67 @@ function aralco_get_filters_for_department($data) {
         return $return;
     }
     return array();
+}
+
+function aralco_apply_points_to_cart() {
+    $options = get_option(ARALCO_SLUG . '_options');
+    $points_enabled = isset($options[ARALCO_SLUG . '_field_enable_points']) && $options[ARALCO_SLUG . '_field_enable_points'] == '1';
+    if(!$points_enabled){
+        return new WP_Error("points_disabled", __("Points are disabled.", ARALCO_SLUG), array('status' => 400));
+    }
+
+    $points_cache = get_user_meta(get_current_user_id(),'points_cache', true);
+    if(!$points_cache) {
+        $points_cache = array();
+    }
+
+    if(!isset($_GET['amount'])){
+        return new WP_Error("amount_missing", __("Amount required.", ARALCO_SLUG), array('status' => 400));
+    }
+    $amount = $_GET['amount'];
+
+    if($amount != floor($amount)){
+        return new WP_Error("decimal_not_allowed", __("You must enter a whole number.", ARALCO_SLUG), array('status' => 400));
+    }
+
+    if($amount > $points_cache['total']){
+        return new WP_Error("amount_over_total", __("You cannot use more points then the order total.", ARALCO_SLUG), array('status' => 400));
+    }
+
+    if($amount <= 0){
+        return new WP_Error("amount_over_total", __("Must be greater then 0.", ARALCO_SLUG), array('status' => 400));
+    }
+
+    $user_aralco_data = get_user_meta(get_current_user_id(), 'aralco_data', true);
+
+    $points = 0;
+    if(isset($user_aralco_data) && isset($user_aralco_data['points'])){
+        $points = $user_aralco_data['points'];
+    }
+
+    $points_multiplier = get_option(ARALCO_SLUG . '_points_exchange', 0);
+
+    if($amount > $points * $points_multiplier){
+        return new WP_Error("amount_over_total", __("Amount to use cannot exceed the order total", ARALCO_SLUG), array('status' => 400));
+    }
+
+    $points_cache['apply_to_order'] = $amount;
+    update_user_meta(get_current_user_id(),'points_cache', $points_cache);
+    return array('status' => 'OK');
+}
+
+function aralco_remove_points_to_cart() {
+    $options = get_option(ARALCO_SLUG . '_options');
+    $points_enabled = isset($options[ARALCO_SLUG . '_field_enable_points']) && $options[ARALCO_SLUG . '_field_enable_points'] == '1';
+    if(!$points_enabled){
+        return new WP_Error("points_disabled", __("Points are disabled.", ARALCO_SLUG), array('status' => 400));
+    }
+
+    $points_cache = get_user_meta(get_current_user_id(),'points_cache', true);
+    if(!$points_cache) {
+        $points_cache = array();
+    }
+    unset($points_cache["apply_to_order"]);
+    update_user_meta(get_current_user_id(),'points_cache', $points_cache);
+    return array('status' => 'OK');
 }

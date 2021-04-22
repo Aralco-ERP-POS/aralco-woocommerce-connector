@@ -23,6 +23,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 $options = get_option(ARALCO_SLUG . '_options');
 $use_quote = isset($options[ARALCO_SLUG . '_field_reference_number_enabled']) && $options[ARALCO_SLUG . '_field_reference_number_enabled'] == '1';
+$points_enabled = isset($options[ARALCO_SLUG . '_field_enable_points']) && $options[ARALCO_SLUG . '_field_enable_points'] == '1';
 
 ?>
 
@@ -36,6 +37,22 @@ $use_quote = isset($options[ARALCO_SLUG . '_field_reference_number_enabled']) &&
 	);
 	?>
 </p>
+
+<?php if($points_enabled) { ?>
+<p>
+    <?php
+
+    $user_aralco_data = get_user_meta($current_user->ID, 'aralco_data', true);
+
+    $points = 0;
+    if(isset($user_aralco_data) && isset($user_aralco_data['points'])){
+        $points = $user_aralco_data['points'];
+    }
+
+    ?>
+    You have <b><?php echo number_format_i18n($points) ?></b> points.
+</p>
+<?php } ?>
 
 <p>
 	<?php

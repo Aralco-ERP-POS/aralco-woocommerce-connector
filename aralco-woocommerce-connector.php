@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.17.8
+ * Version: 1.18.0
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.17.8
+ * @version 1.18.0
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -131,6 +131,15 @@ class Aralco_WooCommerce_Connector {
 
             // register tax handler
             add_action('woocommerce_cart_totals_get_item_tax_rates', array($this, 'calculate_custom_tax_totals'), 10, 3);
+
+            // register points updates
+            add_action('woocommerce_before_cart', array($this, 'update_points'), 100, 0);
+            add_filter('woocommerce_calculated_total', array($this, 'apply_points_discount'), 10, 2);
+            add_action('woocommerce_payment_complete', array($this, 'complete_order_points'), 10, 1);
+            add_action('woocommerce_cart_totals_before_order_total', array($this, 'show_points_block'));
+            add_action('woocommerce_review_order_before_order_total', array($this, 'show_points_block'));
+            add_filter('woocommerce_get_order_item_totals', array($this, 'points_get_order_item_totals'), 10 , 3);
+            add_action('woocommerce_admin_order_totals_after_total', array($this, 'admin_points_display'), 1 , 1);
 
             // disable the need for unique SKUs. Required for Aralco products.
             add_filter('wc_product_has_unique_sku', '__return_false' );
@@ -262,6 +271,18 @@ class Aralco_WooCommerce_Connector {
             ARALCO_SLUG . '_global_section',
             [
                 'label_for' => ARALCO_SLUG . '_field_login_required',
+                'required' => 'required'
+            ]
+        );
+
+        add_settings_field(
+            ARALCO_SLUG . '_field_enable_points',
+            __('Enable Points', ARALCO_SLUG),
+            array($this, 'field_checkbox'),
+            ARALCO_SLUG,
+            ARALCO_SLUG . '_global_section',
+            [
+                'label_for' => ARALCO_SLUG . '_field_enable_points',
                 'required' => 'required'
             ]
         );
@@ -656,6 +677,10 @@ class Aralco_WooCommerce_Connector {
             if(!wp_script_is('store-select2')){
                 wp_register_script( 'store-select2', plugin_dir_url(__FILE__) . '/assets/js/store-select2.js', array( 'jquery' ), '1.0.1' );
                 wp_enqueue_script( 'store-select2');
+            }
+            if(!wp_script_is('aralco-points')){
+                wp_register_script( 'aralco-points', plugin_dir_url(__FILE__) . '/assets/js/points.js', array( 'jquery' ), '1.0.0' );
+                wp_enqueue_script( 'aralco-points');
             }
         }
     }
@@ -1435,6 +1460,93 @@ $repeated_snippet
         if ($result instanceof WP_Error) {
             wc_add_notice($result->get_error_message(), 'error');
         }
+    }
+
+    public function update_points() {
+        Aralco_Processing_Helper::update_points_exchange();
+    }
+
+    public function apply_points_discount($total, $cart) {
+        $options = get_option(ARALCO_SLUG . '_options');
+        $points_enabled = isset($options[ARALCO_SLUG . '_field_enable_points']) && $options[ARALCO_SLUG . '_field_enable_points'] == '1';
+        if(!$points_enabled) return $total;
+
+        $points_cache = get_user_meta(get_current_user_id(),'points_cache', true);
+        if(isset($points_cache) && isset($points_cache['apply_to_order'])) {
+            if($points_cache['apply_to_order'] > $total) {
+                $points_cache = get_user_meta(get_current_user_id(),'points_cache', true);
+                unset($points_cache["apply_to_order"]);
+                update_user_meta(get_current_user_id(),'points_cache', $points_cache);
+                wc_add_notice('Your points were removed from the cart because they exceeded the cart total.', 'notice');
+            } else {
+                return round($total - $points_cache['apply_to_order'], $cart->dp);
+            }
+        }
+        return $total;
+    }
+
+    public function complete_order_points($order_id) {
+        $options = get_option(ARALCO_SLUG . '_options');
+        $points_enabled = isset($options[ARALCO_SLUG . '_field_enable_points']) && $options[ARALCO_SLUG . '_field_enable_points'] == '1';
+        if($points_enabled && is_user_logged_in()){
+            $points_cache = get_user_meta(get_current_user_id(),'points_cache', true);
+            $points_multiplier = get_option(ARALCO_SLUG . '_points_exchange', 0);
+            if(isset($points_cache) && isset($points_cache["apply_to_order"])) {
+                $order = wc_get_order($order_id);
+                $order->add_meta_data('aralco_points_value', $points_cache["apply_to_order"], true);
+                $order->add_meta_data('aralco_points_exchange', $points_multiplier, true);
+                $order->save();
+
+                $points = $points_cache["apply_to_order"] / $points_multiplier;
+                $aralco_user_data = get_user_meta(get_current_user_id(), 'aralco_data', true);
+                if(isset($aralco_user_data) && isset($aralco_user_data['points'])) {
+                    $aralco_user_data['points'] -= $points;
+                    update_user_meta(get_current_user_id(), 'aralco_data', $aralco_user_data);
+                }
+            }
+        }
+
+        delete_user_meta(get_current_user_id(),'points_cache');
+    }
+
+    /* @var $order WC_Order */
+    public function points_get_order_item_totals($total_rows, $order, $tax_display) {
+        $points_value = $order->get_meta('aralco_points_value', 'true', 'edit');
+        if(empty($points_value)) return $total_rows;
+
+        $new_total_rows = array_slice($total_rows, 0, count($total_rows) - 2, true) +
+        array('points' => array(
+            'label' => __( 'Points:', ARALCO_SLUG ),
+            'value' => strip_tags(wc_price($points_value * -1)),
+        )) + array_slice($total_rows, count($total_rows) - 2, count($total_rows), true);
+        $new_total_rows['order_total']['label'] = __( 'Total paid:', ARALCO_SLUG );
+        $new_total_rows['order_total']['value'] = strip_tags(wc_price($order->get_total('edit') - $points_value));
+        return $new_total_rows;
+    }
+
+    public function admin_points_display($order_id) {
+        $order = wc_get_order($order_id);
+        $points_value = $order->get_meta('aralco_points_value', 'true', 'edit');
+        if(empty($points_value)) return;
+        ?>
+
+        <table class="wc-order-totals">
+            <tr>
+                <td class="label"><?php esc_html_e('Amount Paid By Points', ARALCO_SLUG); ?>:</td>
+                <td width="1%"></td>
+                <td class="total">
+                    <?php echo wc_price($points_value, array('currency' => $order->get_currency())); // WPCS: XSS ok. ?>
+                </td>
+            </tr>
+        </table>
+
+        <div class="clear"></div>
+
+        <?php
+    }
+
+    public function show_points_block() {
+        require_once 'partials/points-module.php';
     }
 
     public function calculate_custom_tax_totals($item_tax_rates, $item, $cart){

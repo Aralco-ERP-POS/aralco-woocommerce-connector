@@ -185,6 +185,9 @@ function aralco_validate_config($input) {
     $input[ARALCO_SLUG . '_field_login_required'] = (isset($input[ARALCO_SLUG . '_field_login_required']) &&
         $input[ARALCO_SLUG . '_field_login_required'] == 1) ? '1' : '0';
 
+    $input[ARALCO_SLUG . '_field_enable_points'] = (isset($input[ARALCO_SLUG . '_field_enable_points']) &&
+        $input[ARALCO_SLUG . '_field_enable_points'] == 1) ? '1' : '0';
+
     $input[ARALCO_SLUG . '_field_sync_enabled'] = (isset($input[ARALCO_SLUG . '_field_sync_enabled']) &&
         $input[ARALCO_SLUG . '_field_sync_enabled'] == 1) ? '1' : '0';
 

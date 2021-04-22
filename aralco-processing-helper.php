@@ -1336,6 +1336,13 @@ class Aralco_Processing_Helper {
         return true;
     }
 
+    static function update_points_exchange() {
+        $exchange = Aralco_Connection_Helper::getPointsExchange();
+        if($exchange instanceof WP_Error) return;
+
+        update_option(ARALCO_SLUG . '_points_exchange', $exchange);
+    }
+
     /**
      * Processes and submits the order to Aralco
      *
@@ -1401,8 +1408,14 @@ class Aralco_Processing_Helper {
         } else {
             $payment['paymentMethod'] = ($is_credit) ? 'Account' : 'CC-' . $options[ARALCO_SLUG . '_field_tender_code'] . '-****************';
             $payment['message'] = $order->get_payment_method_title();
-            $payment['totalPaid'] = ($order->is_paid()) ? $order->get_total() : '0.00';
             $payment['totalDue'] = ($order->is_paid()) ? '0.00' : $order->get_total();
+            $points_value = $order->get_meta('aralco_points_value', 'true', 'edit');
+            if(!empty($points_value)) {
+                $payment['totalPaid'] = $order->get_total() - $points_value;
+                $payment['PointsPaid'] = $points_value;
+            } else {
+                $payment['totalPaid'] = ($order->is_paid()) ? $order->get_total() : '0.00';
+            }
         }
 
         if(!$is_credit && !$is_quote){
