@@ -1,5 +1,5 @@
 <?php
-
+require_once(ABSPATH.'wp-admin/includes/plugin.php');
 
 class Aralco_Gift_Cards {
     public function __construct(){

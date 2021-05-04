@@ -2,6 +2,7 @@
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
 require_once "aralco-util.php";
+require_once(ABSPATH.'wp-admin/includes/plugin.php');
 
 /**
  * Class Aralco_Processing_Helper

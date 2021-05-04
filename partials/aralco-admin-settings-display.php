@@ -1,6 +1,7 @@
 <?php
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
+require_once(ABSPATH.'wp-admin/includes/plugin.php');
 
 /**
  * Provide a admin area view for the plugin
