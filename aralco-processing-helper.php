@@ -39,7 +39,10 @@ class Aralco_Processing_Helper {
                 );
             }
 
-            $result = Aralco_Processing_Helper::process_shipping_products();
+            $result = Aralco_Processing_Helper::process_shipping_product();
+            if ($result instanceof WP_Error) return $result;
+
+            $result = Aralco_Processing_Helper::process_giftcard_product();
             if ($result instanceof WP_Error) return $result;
 
             $lastSync = get_option(ARALCO_SLUG . '_last_sync');
@@ -69,6 +72,8 @@ class Aralco_Processing_Helper {
         } else {
             global $temp_shipping_product_code;
             $temp_shipping_product_code = get_option(ARALCO_SLUG . '_shipping_product_code', null);
+            global $temp_giftcard_product_code;
+            $temp_giftcard_product_code = get_option(ARALCO_SLUG . '_giftcard_product_code', null);
         }
 
         if(is_array($products)){ // Got Data
@@ -104,7 +109,7 @@ class Aralco_Processing_Helper {
         return true;
     }
 
-    static function process_shipping_products() {
+    static function process_shipping_product() {
         /* Get and save shipping product code */
         $shipping_setting = Aralco_Connection_Helper::getSetting('ShippingProductCode');
         if ($shipping_setting instanceof WP_Error) return $shipping_setting;
@@ -115,6 +120,21 @@ class Aralco_Processing_Helper {
         } else {
             delete_option(ARALCO_SLUG . '_shipping_product_code');
             $temp_shipping_product_code = null;
+        }
+        return true;
+    }
+
+    static function process_giftcard_product() {
+        /* Get and save giftcard product code */
+        $giftcard_setting = Aralco_Connection_Helper::getSetting('GiftCardProductCode', 'UDI');
+        if ($giftcard_setting instanceof WP_Error) return $giftcard_setting;
+        global $temp_giftcard_product_code;
+        if (is_array($giftcard_setting) && isset($giftcard_setting['Value'])) {
+            update_option(ARALCO_SLUG . '_giftcard_product_code', $giftcard_setting['Value']);
+            $temp_giftcard_product_code = $giftcard_setting['Value'];
+        } else {
+            delete_option(ARALCO_SLUG . '_giftcard_product_code');
+            $temp_giftcard_product_code = null;
         }
         return true;
     }
@@ -151,7 +171,9 @@ class Aralco_Processing_Helper {
      */
     static function process_item($item) {
         global $temp_shipping_product_code;
-        if(!is_null($temp_shipping_product_code) && strcasecmp($temp_shipping_product_code, $item['Product']['Code']) == 0){
+        global $temp_giftcard_product_code;
+        if((!is_null($temp_shipping_product_code) && strcasecmp($temp_shipping_product_code, $item['Product']['Code']) == 0) ||
+            (!is_null($temp_giftcard_product_code) && strcasecmp($temp_giftcard_product_code, $item['Product']['Code']) == 0)){
             $post_type = 'private';
         } else {
             $post_type = 'publish';
@@ -1385,10 +1407,14 @@ class Aralco_Processing_Helper {
             }
         }
 
-        $is_local_pickup = array_values($order->get_shipping_methods())[0]->get_method_id() == ARALCO_SLUG . '_pickup_shipping';
-        $pickup_store_id = 0;
-        if($is_local_pickup) {
-            $pickup_store_id = array_values($order->get_shipping_methods())[0]->get_meta('aralco_id');
+        if(count($order->get_shipping_methods()) > 0) {
+            $shipping_rate = array_values($order->get_shipping_methods())[0];
+            $is_local_pickup = $shipping_rate->get_method_id() == ARALCO_SLUG . '_pickup_shipping';
+            if($is_local_pickup) {
+                $pickup_store_id = array_values($order->get_shipping_methods())[0]->get_meta('aralco_id');
+            }
+        } else {
+            $is_local_pickup = false;
         }
 
         $is_credit = $order->get_payment_method() == 'aralco_account_credit';
@@ -1423,14 +1449,20 @@ class Aralco_Processing_Helper {
             $payment['ReferenceNumber'] = '1234'; // TODO: get real Ref Number
         }
 
+        $billing_address = array(
+            'name'          => $order->get_billing_first_name(),
+            'surname'       => $order->get_billing_last_name(),
+            'companyName'   => $order->get_billing_company(),
+            'address1'      => $order->get_billing_address_1(),
+            'address2'      => $order->get_billing_address_2(),
+            'city'          => $order->get_billing_city(),
+            'provinceState' => $order->get_billing_state(),
+            'country'       => $order->get_billing_country(),
+            'zipPostalCode' => $order->get_billing_postcode()
+        );
 
-        $aralco_order = array(
-            'username'   => (isset($aralco_user['email'])) ? $aralco_user['email'] : $options[ARALCO_SLUG . '_field_default_order_email'],
-            'storeId'    => $options[ARALCO_SLUG . '_field_store_id'],
-            'items'      => array(),
-            'weborderid' => $order_id,
-            'payment'         => $payment,
-            'shippingAddress' => array(
+        if($order->has_shipping_address()){
+            $shipping_address = array(
                 'name'          => $order->get_shipping_first_name(),
                 'surname'       => $order->get_shipping_last_name(),
                 'companyName'   => $order->get_shipping_company(),
@@ -1440,21 +1472,50 @@ class Aralco_Processing_Helper {
                 'provinceState' => $order->get_shipping_state(),
                 'country'       => $order->get_shipping_country(),
                 'zipPostalCode' => $order->get_shipping_postcode()
-            ),
-            'billingAddress'  => array(
-                'name'          => $order->get_billing_first_name(),
-                'surname'       => $order->get_billing_last_name(),
-                'companyName'   => $order->get_billing_company(),
-                'address1'      => $order->get_billing_address_1(),
-                'address2'      => $order->get_billing_address_2(),
-                'city'          => $order->get_billing_city(),
-                'provinceState' => $order->get_billing_state(),
-                'country'       => $order->get_billing_country(),
-                'zipPostalCode' => $order->get_billing_postcode()
-            ),
+            );
+        } else {
+            $shipping_address = $billing_address;
+        }
+
+        $aralco_order = array(
+            'username'   => (isset($aralco_user['email'])) ? $aralco_user['email'] : $options[ARALCO_SLUG . '_field_default_order_email'],
+            'storeId'    => $options[ARALCO_SLUG . '_field_store_id'],
+            'items'      => array(),
+            'weborderid' => $order_id,
+            'payment'         => $payment,
+            'shippingAddress' => $shipping_address,
+            'billingAddress'  => $billing_address,
             'TransType' => '7',
             'UoMDivideByDecimal' => true
+//            'orderMeta' => print_r($order->get_items( 'gift_card' ), true)
         );
+
+        $giftcard_total = 0;
+        if (is_plugin_active('woocommerce-gift-cards/woocommerce-gift-cards.php')){
+            $giftcards = $order->get_items('gift_card');
+            if(is_array($giftcards) && count($giftcards) > 0){
+                $aralco_order['GiftCards'] = array();
+
+                /** @var WC_GC_Order_Item_Gift_Card $giftcard */
+                foreach ($giftcards as $giftcard) {
+                    $amount = $giftcard->get_amount();
+                    $giftcard_total += $amount;
+                    $aralco_order['GiftCards'][] = array(
+                        'Code' => str_replace('-', '', $giftcard->get_code()),
+                        'Used' => $amount
+                    );
+                }
+
+                $order_total = WC_GC()->order->get_order_total($order);
+                $aralco_order['payment']['total'] = $order_total;
+                $points_value = $order->get_meta('aralco_points_value', 'true', 'edit');
+                if(!empty($points_value)) {
+                    $payment['totalPaid'] = $order_total - $points_value - $giftcard_total;
+                } else {
+                    $payment['totalPaid'] = $order_total - $giftcard_total;
+                }
+            }
+        }
 
         if(isset($options[ARALCO_SLUG . '_field_order_is_quote']) &&
             $options[ARALCO_SLUG . '_field_order_is_quote'] == '1') {
@@ -1476,11 +1537,23 @@ class Aralco_Processing_Helper {
             $aralco_order['Remarks'] = $customer_note;
         }
 
+        $gift_card_code = get_option(ARALCO_SLUG . '_giftcard_product_code', null);
+
         /**
          * @var $item WC_Order_Item_Product
          */
         foreach ($order->get_items() as $item){
+
+            $gc_amount = $item->get_meta('wc_gc_giftcard_amount');
+            $is_gc = !empty($gc_amount);
+
             $product = $item->get_product();
+            if($is_gc) {
+                $gc_base_id = wc_get_product_id_by_sku($gift_card_code);
+                if($gc_base_id && $gc_base_id > 0) {
+                    $product = wc_get_product($gc_base_id);
+                }
+            }
             $quantity = $item->get_quantity();
             $price = floatval($item->get_subtotal()) / floatval($item->get_quantity());
 
@@ -1525,6 +1598,18 @@ class Aralco_Processing_Helper {
             );
             if($is_local_pickup){
                 $item_to_push['SellFromStoreID'] = $pickup_store_id;
+            }
+            if($is_gc){
+                $results = WC_GC()->db->giftcards->query(array(
+                    'return'          => 'objects',
+                    'order_item_id'   => $item->get_id(),
+                    'limit'           => 1,
+                ));
+                if(count($results) > 0) {
+                    /** @var WC_GC_Gift_Card_Data $gcd */
+                    $gcd = array_pop($results);
+                    $item_to_push['GiftCardNo'] = str_replace('-', '', $gcd->get_code());
+                }
             }
 
             array_push($aralco_order['items'], $item_to_push);

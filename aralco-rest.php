@@ -233,7 +233,9 @@ function aralco_continue_sync() {
             case 'products_init':
                 $result = Aralco_Processing_Helper::process_disabled_products();
                 if($result instanceof WP_Error) return $result;
-                $result = Aralco_Processing_Helper::process_shipping_products();
+                $result = Aralco_Processing_Helper::process_shipping_product();
+                if($result instanceof WP_Error) return $result;
+                $result = Aralco_Processing_Helper::process_giftcard_product();
                 if($result instanceof WP_Error) return $result;
                 $products = Aralco_Connection_Helper::getProducts($chunk_data['last_sync']);
                 if($products instanceof WP_Error) return $products;

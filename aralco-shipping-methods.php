@@ -248,7 +248,7 @@ add_action('woocommerce_review_order_before_cart_contents', 'aralco_validate_ord
 add_action('woocommerce_after_checkout_validation', 'aralco_validate_order', 10);
 
 function aralco_prevent_stock_reduction_on_pickup_in_store($can_reduce_stock, $order){
-    if(array_values($order->get_shipping_methods())[0]->get_method_id() == ARALCO_SLUG . '_pickup_shipping'){
+    if(count($order->get_shipping_methods()) > 0 && array_values($order->get_shipping_methods())[0]->get_method_id() == ARALCO_SLUG . '_pickup_shipping'){
         return false;
     }
     return $can_reduce_stock;

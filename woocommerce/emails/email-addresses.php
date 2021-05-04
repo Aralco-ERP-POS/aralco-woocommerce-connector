@@ -23,8 +23,13 @@ $text_align = is_rtl() ? 'right' : 'left';
 $address    = $order->get_formatted_billing_address();
 $shipping   = $order->get_formatted_shipping_address();
 
-$shipping_rate = array_values($order->get_shipping_methods())[0];
-$is_aralco_local_pickup = $shipping_rate->get_method_id() == ARALCO_SLUG . '_pickup_shipping';
+if(count($order->get_shipping_methods()) > 0) {
+    $shipping_rate = array_values($order->get_shipping_methods())[0];
+    $is_aralco_local_pickup = $shipping_rate->get_method_id() == ARALCO_SLUG . '_pickup_shipping';
+} else {
+    $is_aralco_local_pickup = false;
+}
+
 if($is_aralco_local_pickup) {
     $aralco_store_id = $shipping_rate->get_meta_data()[0]->get_data()['value'];
     $stores = $stores = get_option(ARALCO_SLUG . '_stores', array());

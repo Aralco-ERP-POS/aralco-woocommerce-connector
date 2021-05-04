@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.18.0
+ * Version: 1.19.0
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.18.0
+ * @version 1.19.0
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -1601,6 +1601,10 @@ $repeated_snippet
             return $to_return;
         }
 
+        if(isset($item->object['wc_gc_giftcard_to_multiple']) && count($item->object['wc_gc_giftcard_to_multiple']) > 0) {
+            return $item_tax_rates;
+        }
+
         wc_add_notice(sprintf(__('Sorry, but "%s" appears to be missing tax info. Please report this to the site administrator.', ARALCO_SLUG), $item->object['data']->get_name()), 'error');
         return $item_tax_rates;
     }
@@ -1866,5 +1870,6 @@ $repeated_snippet
 require_once 'aralco-widget.php';
 require_once 'aralco-rest.php';
 require_once 'aralco-payment-gateway.php';
+require_once 'aralco-gift-card.php';
 
 new Aralco_WooCommerce_Connector();
