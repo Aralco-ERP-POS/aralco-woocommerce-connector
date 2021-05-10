@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.19.1
+ * Version: 1.19.2
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 4.2.2
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.19.1
+ * @version 1.19.2
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -1707,7 +1707,10 @@ $repeated_snippet
      * @param $order_id
      */
     public function submit_order_to_aralco($order_id) {
-        Aralco_Processing_Helper::process_order($order_id);
+        $result = Aralco_Processing_Helper::process_order($order_id);
+        if ($result instanceof WP_Error) {
+            wc_add_notice(__("Order submission to BOS failed: ", ARALCO_SLUG) . $result->get_error_message(),'error');
+        }
     }
 
     public function show_reference_number($order) {

@@ -1601,15 +1601,17 @@ class Aralco_Processing_Helper {
                 $item_to_push['SellFromStoreID'] = $pickup_store_id;
             }
             if($is_gc){
-                $results = WC_GC()->db->giftcards->query(array(
-                    'return'          => 'objects',
-                    'order_item_id'   => $item->get_id(),
-                    'limit'           => 1,
-                ));
-                if(count($results) > 0) {
-                    /** @var WC_GC_Gift_Card_Data $gcd */
-                    $gcd = array_pop($results);
-                    $item_to_push['GiftCardNo'] = str_replace('-', '', $gcd->get_code());
+                for($i = 0; $i < 10; $i++){
+                    $number = self::get_giftcard_number($item->get_id());
+                    if($number == false){
+                        sleep(1);
+                        continue;
+                    } else {
+                        $item_to_push['GiftCardNo'] = $number;
+                    }
+                }
+                if(!isset($item_to_push['GiftCardNo'])){
+                    return new WP_Error('gc_not_found', __('Could not locate the GiftCard number after 10 attempts. Please report this.', ARALCO_SLUG));
                 }
             }
 
@@ -1628,5 +1630,19 @@ class Aralco_Processing_Helper {
 //        file_put_contents(get_temp_dir() . 'test.txt', $out, FILE_APPEND); //TODO Remove when done testing.
 
         return $result;
+    }
+
+    private static function get_giftcard_number($order_item_id){
+        $results = WC_GC()->db->giftcards->query(array(
+            'return'          => 'objects',
+            'order_item_id'   => $order_item_id,
+            'limit'           => 1,
+        ));
+        if(count($results) > 0) {
+            /** @var WC_GC_Gift_Card_Data $gcd */
+            $gcd = array_pop($results);
+            return str_replace('-', '', $gcd->get_code());
+        }
+        return false;
     }
 }

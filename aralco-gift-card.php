@@ -6,7 +6,8 @@ class Aralco_Gift_Cards {
         add_filter('woocommerce_gc_account_session_timeout_minutes', function(){return 0;});
         add_action('template_redirect', array($this, 'process_redeem'), 9, 1);
         add_action('wc_ajax_apply_gift_card_to_session', array($this, 'apply_gift_card_to_session'), 9, 1);
-        add_action( 'woocommerce_after_checkout_validation', array($this, 'update_giftcard_totals'), 10, 2);
+        add_action('woocommerce_after_checkout_validation', array($this, 'update_giftcard_totals'), 10, 2);
+        add_action('wp_enqueue_scripts', array($this, 'include_mask_js'));
     }
 
     /**
@@ -168,6 +169,11 @@ class Aralco_Gift_Cards {
 
 
         }
+    }
+
+    public function include_mask_js() {
+        wp_enqueue_script( 'inputmask', plugin_dir_url( __FILE__ ) . 'assets/js/jquery.inputmask.min.js', array( 'jquery' ));
+        wp_enqueue_script( 'inputmask-checkout', plugin_dir_url( __FILE__ ) . 'assets/js/inputmask-checkout.js', array( 'jquery' ));
     }
 }
 
