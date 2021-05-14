@@ -1620,14 +1620,15 @@ class Aralco_Processing_Helper {
 
         if (isset($just_return) && $just_return) return $aralco_order;
 
+        update_post_meta($order_id, '_aralco_order_array', $aralco_order);
+
         $result = Aralco_Connection_Helper::createOrder($aralco_order);
         if (!$result instanceof WP_Error) {
+            update_post_meta($order_id, 'aralco_order_success', 'yes');
             return true;
         }
 
-//        $out = 'order: ' . json_encode($aralco_order, JSON_PRETTY_PRINT) . "\n" .
-//               'result: ' . print_r($result, true) . "\n\n";
-//        file_put_contents(get_temp_dir() . 'test.txt', $out, FILE_APPEND); //TODO Remove when done testing.
+        update_post_meta($order_id, 'aralco_order_success', 'no');
 
         return $result;
     }

@@ -162,14 +162,23 @@ require_once(ABSPATH.'wp-admin/includes/plugin.php');
     </script>
     <?php if (isset($_POST['get-order-json']) && isset($_POST['order-id'])) { ?>
     <h1>Order JSON</h1>
-    <pre><?php
-        $order = Aralco_Processing_Helper::process_order(intval($_POST['order-id']), true);
-        if($order instanceof WP_Error) {
-            echo $order->get_error_message();
-        } else {
-            echo json_encode($order, JSON_PRETTY_PRINT);
-        }
-    ?></pre>
+    <?php
+    $order = wc_get_order($_POST['order-id']);
+    $order_array = $order->get_meta('_aralco_order_array');
+    $notice = '';
+    if(empty($order_array)) {
+        $notice = sprintf(__("Order #%s doesn't have saved aralco order data. Generating new data...", ARALCO_SLUG), $_POST['order-id']);
+        $order_array = Aralco_Processing_Helper::process_order(intval($_POST['order-id']), true);
+    }
+    if($order_array instanceof WP_Error) {
+        $to_echo = $order_array->get_error_message();
+    } else {
+        $to_echo = json_encode($order_array, JSON_PRETTY_PRINT);
+    }
+    if(!empty($notice)){ ?>
+    <p><?php echo $notice ?></p>
+    <?php } ?>
+    <pre><?php echo $to_echo ?></pre>
     <?php } ?>
     <h1>Tools</h1>
     <div class="aralco-columns">

@@ -38,11 +38,17 @@ $points_enabled = isset($options[ARALCO_SLUG . '_field_enable_points']) && $opti
 	?>
 </p>
 
-<?php if($points_enabled) { ?>
-<p>
-    <?php
+<?php if($points_enabled) {
 
-    $user_aralco_data = get_user_meta($current_user->ID, 'aralco_data', true);
+    $cached_user_aralco_data = get_user_meta($current_user->ID, 'aralco_data', true);
+    $user_aralco_data = Aralco_Connection_Helper::getCustomer('Id', $cached_user_aralco_data['id']);
+    if($user_aralco_data instanceof WP_Error || $user_aralco_data == false){
+        $user_aralco_data = $cached_user_aralco_data;
+        echo '<p>' . __('There was a problem refreshing your points.', ARALCO_SLUG) . '</p>';
+    } else {
+        $cached_user_aralco_data['points'] = $user_aralco_data['points'] ?? 0;
+        update_user_meta($current_user->ID, 'aralco_data', $cached_user_aralco_data);
+    }
 
     $points = 0;
     if(isset($user_aralco_data) && isset($user_aralco_data['points'])){
@@ -50,8 +56,7 @@ $points_enabled = isset($options[ARALCO_SLUG . '_field_enable_points']) && $opti
     }
 
     ?>
-    You have <b><?php echo number_format_i18n($points) ?></b> points.
-</p>
+    <p>You have <b><?php echo number_format_i18n($points) ?></b> points.</p>
 <?php } ?>
 
 <p>
