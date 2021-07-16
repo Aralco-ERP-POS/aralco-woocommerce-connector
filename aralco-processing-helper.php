@@ -425,7 +425,7 @@ class Aralco_Processing_Helper {
         delete_post_thumbnail($post_id); // Removes the thumbnail/featured image
         update_post_meta($post_id,'_product_image_gallery',''); // Removes the product gallery
 
-        $images = Aralco_Connection_Helper::getImagesForProduct($item['ProductID']);
+        $images = Aralco_Connection_Helper::getImagesForProduct($item['ProductID'], $item['Product']['HasDimension']);
         $upload_dir = wp_upload_dir();
 
         foreach($images as $key => $image) {
@@ -448,16 +448,17 @@ class Aralco_Processing_Helper {
             // Create the image file on the server
             file_put_contents($file, $image->image_data);
             // Check image file type
-            $wp_filetype = wp_check_filetype( $filename, null );
+            $wp_filetype = wp_check_filetype($filename);
             // Set attachment data
             $attachment = array(
                 'post_mime_type' => $wp_filetype['type'],
-                'post_title' => sanitize_file_name( $filename ),
+                'post_title' => sanitize_file_name($filename),
                 'post_content' => '',
                 'post_status' => 'inherit'
             );
             // Create the attachment
             $attach_id = wp_insert_attachment( $attachment, $file, $post_id );
+            $images[$key]->image_id = $attach_id;
             // Include image.php
             require_once(ABSPATH . 'wp-admin/includes/image.php');
             // Define attachment metadata
@@ -477,6 +478,22 @@ class Aralco_Processing_Helper {
                 $attach_id_array .= ','.$attach_id;
                 update_post_meta($post_id,'_product_image_gallery',$attach_id_array);
             }
+            if(!$item['Product']['HasDimension']) continue; // Nothing left to do
+
+            if($image->barcode < 0 || $image->image_id < 0) continue;
+
+            $args = array(
+                'posts_per_page'    => 1,
+                'post_type'         => 'product_variation',
+                'meta_key'          => '_aralco_barcode',
+                'meta_value'        => $image->barcode
+            );
+
+            $results = (new WP_Query($args))->get_posts();
+
+            if (count($results) <= 0) continue;
+
+            set_post_thumbnail($results[0]->ID, $image->image_id);
         }
     }
 
@@ -596,6 +613,8 @@ class Aralco_Processing_Helper {
             } else {
                 $variation_id = $results[0]->ID;
             }
+
+            update_post_meta($variation_id, '_aralco_barcode', $combo['Barcode']);
 
             // Get an instance of the WC_Product_Variation object
             $variation = new WC_Product_Variation($variation_id);

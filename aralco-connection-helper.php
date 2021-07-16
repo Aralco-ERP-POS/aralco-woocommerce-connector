@@ -9,16 +9,22 @@ defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
  *
  * @property string image_data the raw data of the image
  * @property string mime_type the mime type string associated with the image data
+ * @property int image_id the id of the created wordpress attachment
+ * @property int barcode the barcode of the associated product variation
  */
 class Aralco_Image {
     /**
      * Aralco_Image constructor.
      * @param string $image_data the raw data of the image
      * @param string $mime_type the mime type string associated with the image data
+     * @param int $image_id the id of the created wordpress attachment
+     * @param int $barcode the barcode of the associated product variation
      */
-    public function __construct($image_data, $mime_type = 'image/jpeg'){
+    public function __construct(string $image_data, $mime_type = 'image/jpeg', $image_id = -1, $barcode = -1) {
         $this->image_data = $image_data;
         $this->mime_type = $mime_type;
+        $this->image_id = $image_id;
+        $this->barcode = $barcode;
     }
 }
 
@@ -376,19 +382,39 @@ class Aralco_Connection_Helper {
      * Gets all the images associated with a product
      *
      * @param int $product_id the product to get the images for
-     * @return Aralco_Image[] an array of AralcoImage objects
+     * @param bool $has_grids weather or not grids should be checked
+     * @return Aralco_Image[]|WP_Error an array of AralcoImage objects or an error if the the API call fails
      */
-    static function getImagesForProduct($product_id) {
+    static function getImagesForProduct($product_id, $has_grids) {
         $options = get_option(ARALCO_SLUG . '_options');
 
+        $combos = ($has_grids)? Aralco_Connection_Helper::getProductBarcodes($product_id) : array();
+        if($combos instanceof WP_Error) return $combos;
+
+        $keys = array(0 => 'GetImage', 1 => 'GetWebImage');
+        foreach($combos as $combo){
+            $keys[count($keys)] = $combo;
+        }
+
         $images = array();
-        foreach (array(0 => 'GetImage', 1 => 'GetWebImage') as $key=>$item){
-            for($i = 0; $i < 10; $i++){
-                if($key == 1 && $i < 1) $i = 1;
+
+        foreach ($keys as $key=>$item){
+            for($i = 1; $i <= 10; $i++){
+                if($key > 1 && $has_grids){
+                    $url = $options[ARALCO_SLUG . '_field_api_location'] . 'api/Product/GetImage/?id=' . $product_id .
+                        '&gridid1=' . (is_null($item['Grids'][0]['GridID']) ? '0' : $item['Grids'][0]['GridID']) .
+                        '&gridid2=' . (is_null($item['Grids'][1]['GridID']) ? '0' : $item['Grids'][1]['GridID']) .
+                        '&gridid3=' . (is_null($item['Grids'][2]['GridID']) ? '0' : $item['Grids'][2]['GridID']) .
+                        '&gridid4=' . (is_null($item['Grids'][3]['GridID']) ? '0' : $item['Grids'][3]['GridID']) .
+                        '&position=' . $i;
+                } else {
+                    $position = ($key == 0)? 0 : $i;
+                    $url = $options[ARALCO_SLUG . '_field_api_location'] . 'api/Product/' . $item . '/?id=' .
+                        $product_id . '&position=' . $position;
+                }
 
                 $curl = curl_init();
-                curl_setopt($curl, CURLOPT_URL, $options[ARALCO_SLUG . '_field_api_location'] .
-                                                'api/Product/' . $item . '/?id=' . $product_id . '&position=' . $i);
+                curl_setopt($curl, CURLOPT_URL, $url);
                 curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false); // Disable SSL verification
                 curl_setopt($curl, CURLOPT_RETURNTRANSFER, true); // Return instead of printing
                 curl_setopt($curl, CURLOPT_HTTPHEADER, array(
@@ -400,7 +426,13 @@ class Aralco_Connection_Helper {
                 curl_close($curl); // Close the cURL handler
 
                 if($http_code == 200){
-                    array_push($images, new Aralco_Image($data, $mime_type));
+                    array_push($images, new Aralco_Image(
+                        $data,
+                        $mime_type,
+                        -1,
+                        ($has_grids && $key > 1) ? $item['Barcode'] : -1
+                    ));
+                    if($key == 0) break;
                 } else {
                     break;
                 }
