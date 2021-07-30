@@ -200,6 +200,9 @@ function aralco_validate_config($input) {
     $input[ARALCO_SLUG . '_field_order_is_quote'] = (isset($input[ARALCO_SLUG . '_field_order_is_quote']) &&
         $input[ARALCO_SLUG . '_field_order_is_quote'] == 1) ? '1' : '0';
 
+    $input[ARALCO_SLUG . '_field_order_itemized_notes'] = (isset($input[ARALCO_SLUG . '_field_order_itemized_notes']) &&
+        $input[ARALCO_SLUG . '_field_order_itemized_notes'] == 1)? '1' : '0';
+
     $input[ARALCO_SLUG . '_field_reference_number_enabled'] =
         (isset($input[ARALCO_SLUG . '_field_reference_number_enabled']) &&
         $input[ARALCO_SLUG . '_field_reference_number_enabled'] == 1) ? '1' : '0';

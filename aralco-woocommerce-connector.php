@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.20.0
+ * Version: 1.21.0
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 5.3.0
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.20.0
+ * @version 1.21.0
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -141,6 +141,14 @@ class Aralco_WooCommerce_Connector {
             add_action('woocommerce_review_order_before_order_total', array($this, 'show_points_block'));
             add_filter('woocommerce_get_order_item_totals', array($this, 'points_get_order_item_totals'), 10 , 3);
             add_action('woocommerce_admin_order_totals_after_total', array($this, 'admin_points_display'), 1 , 1);
+
+            // Register itemized notes hooks
+
+            add_action('woocommerce_after_cart_item_name', array($this, 'add_notes_input_after_cart_item_name'), 10, 2);
+            add_action('wp_enqueue_scripts', array($this, 'itemized_notes_enqueue_scripts'));
+            add_action('wp_ajax_aralco_update_cart_item_notes', array($this, 'save_item_note_to_cart'));
+            add_action('woocommerce_checkout_create_order_line_item', array($this, 'add_item_notes_meta_cart_item'), 10, 4);
+            add_filter('woocommerce_get_item_data', array($this, 'add_notes_to_item_data'), 10, 2);
 
             // disable the need for unique SKUs. Required for Aralco products.
             add_filter('wc_product_has_unique_sku', '__return_false' );
@@ -411,6 +419,19 @@ class Aralco_WooCommerce_Connector {
                 'label_for' => ARALCO_SLUG . '_field_order_is_quote',
                 'required' => 'required',
                 'description' => 'When checked, any new orders will be sent to Aralco as a Quote instead of an Order'
+            ]
+        );
+
+        add_settings_field(
+            ARALCO_SLUG . '_field_order_itemized_notes',
+            __('Allow Per-item Notes', ARALCO_SLUG),
+            array($this, 'field_checkbox'),
+            ARALCO_SLUG,
+            ARALCO_SLUG . '_order_section',
+            [
+                'label_for' => ARALCO_SLUG . '_field_order_itemized_notes',
+                'required' => 'required',
+                'description' => 'When checked, customers can supply notes on a per-item basis'
             ]
         );
 
@@ -1869,6 +1890,93 @@ $repeated_snippet
             }
         }
     }
+
+    /* itemized notes hooks */
+
+    /**
+     * Add a text field to each cart item
+     */
+    public function add_notes_input_after_cart_item_name($cart_item, $cart_item_key) {
+        $options = get_option(ARALCO_SLUG . '_options');
+        if(!isset($options[ARALCO_SLUG . '_field_order_itemized_notes']) ||
+            $options[ARALCO_SLUG . '_field_order_itemized_notes'] != '1') {
+            return;
+        }
+        $notes = isset($cart_item['notes'])? $cart_item['notes'] : '';
+        printf(
+            '<div><label><input type="checkbox" class="toggle_item_note" data-toggle="#cart_notes_%s" autocomplete="off"%s> Add Note</label></div>',
+            $cart_item_key,
+            empty($notes) ? '' : ' checked="checked"'
+        );
+        printf(
+            '<div><textarea class="aralco-cart-notes" id="cart_notes_%s" data-cart-id="%s" style="%s">%s</textarea></div>',
+            $cart_item_key,
+            $cart_item_key,
+            empty($notes) ? 'display:none;' : '',
+            $notes
+        );
+    }
+
+    /**
+     * Enqueue our JS file
+     */
+    public function itemized_notes_enqueue_scripts() {
+        $options = get_option(ARALCO_SLUG . '_options');
+        if(!isset($options[ARALCO_SLUG . '_field_order_itemized_notes']) ||
+            $options[ARALCO_SLUG . '_field_order_itemized_notes'] != '1') {
+            return;
+        }
+        wp_register_script('aralco-item-note-script', trailingslashit(plugin_dir_url(__FILE__)) . 'assets/js/item-notes-ajax.js', array('jquery-blockui'), time(), true);
+        wp_localize_script(
+            'aralco-item-note-script',
+            'aralco_vars',
+            array(
+                'ajaxurl' => admin_url('admin-ajax.php')
+            )
+        );
+        wp_enqueue_script('aralco-item-note-script');
+    }
+
+    /**
+     * Update cart item notes
+     */
+    public function save_item_note_to_cart() {
+        // Do a nonce check
+        if (!isset($_POST['security']) || !wp_verify_nonce($_POST['security'], 'woocommerce-cart')) {
+            wp_send_json(array('nonce_fail' => 1));
+            exit;
+        }
+        // Save the notes to the cart meta
+        $cart = WC()->cart->cart_contents;
+        $cart_id = $_POST['cart_id'];
+        $notes = $_POST['notes'];
+        $cart_item = $cart[$cart_id];
+        $cart_item['notes'] = sanitize_text_field($notes);
+        WC()->cart->cart_contents[$cart_id] = $cart_item;
+        WC()->cart->set_session();
+        wp_send_json(array('success' => 1));
+        exit;
+    }
+
+    public function add_item_notes_meta_cart_item($item, $cart_item_key, $values, $order) {
+        foreach ($item as $cart_item_key => $cart_item) {
+            if (isset($cart_item['notes'])) {
+                $item->add_meta_data('notes', $cart_item['notes'], true);
+            }
+        }
+    }
+
+    public function add_notes_to_item_data($item_data, $cart_item) {
+        if (!is_cart() && !empty($cart_item['notes'])) {
+            $item_data[] = array(
+                'key' => 'Notes',
+                'value' => $cart_item['notes']
+            );
+        }
+        return $item_data;
+    }
+
+    /* End of itemized notes hooks */
 }
 
 require_once 'aralco-widget.php';

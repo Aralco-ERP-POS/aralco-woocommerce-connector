@@ -1567,6 +1567,8 @@ class Aralco_Processing_Helper {
             $gc_amount = $item->get_meta('wc_gc_giftcard_amount');
             $is_gc = !empty($gc_amount);
 
+            $remark = $item->get_meta('notes');
+
             $product = $item->get_product();
             if($is_gc) {
                 $gc_base_id = wc_get_product_id_by_sku($gift_card_code);
@@ -1616,6 +1618,11 @@ class Aralco_Processing_Helper {
                 'dimensionId3' => (is_array($grids) && isset($grids['dimensionId3']) && !empty($grids['dimensionId3'])) ? $grids['dimensionId3'] : null,
                 'dimensionId4' => (is_array($grids) && isset($grids['dimensionId4']) && !empty($grids['dimensionId4'])) ? $grids['dimensionId4'] : null
             );
+
+            if(!empty($remark)){
+                $item_to_push['remark'] = $remark;
+            }
+
             if($is_local_pickup){
                 $item_to_push['SellFromStoreID'] = $pickup_store_id;
             }
