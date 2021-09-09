@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.21.0
+ * Version: 1.22.0
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 5.3.0
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.21.0
+ * @version 1.22.0
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -108,6 +108,7 @@ class Aralco_WooCommerce_Connector {
             // register customer group price and UoM hooks
             add_filter('woocommerce_get_price_html', array($this, 'alter_price_display'), 100, 2);
             add_filter('woocommerce_cart_item_price', array($this, 'alter_cart_price_display'), 100, 2);
+            add_filter('woocommerce_cart_item_subtotal', array($this, 'alter_cart_item_subtotal_display'), 100, 3);
             add_filter('woocommerce_checkout_cart_item_quantity', array($this, 'alter_cart_quantity_display'), 100, 3);
             add_action('woocommerce_before_calculate_totals', array($this, 'alter_price_cart'), 100);
             add_action('woocommerce_format_stock_quantity', array($this, 'alter_availability_text'), 100, 2);
@@ -1065,6 +1066,25 @@ class Aralco_WooCommerce_Connector {
     }
 
     /**
+     * @param string $product_subtotal
+     * @param array $product cart item
+     * @param string $cart_item_key
+     * @return string
+     */
+    public function alter_cart_item_subtotal_display($product_subtotal, $cart_item, $cart_item_key) {
+        $sell_by = get_post_meta($cart_item['product_id'], '_aralco_sell_by', true);
+        $decimals = (is_array($sell_by) && is_numeric($sell_by['decimals']))? $sell_by['decimals'] : 0;
+
+        if ($decimals > 0) {
+            $quantity = (did_action('aralco_changed_quantity') < 1) ?
+                $cart_item['quantity'] / (10 ** $decimals) : $cart_item['quantity'];
+            return wc_price(doubleval($cart_item['data']->get_price()) * $quantity);
+        }
+
+        return wc_price($cart_item['line_subtotal']);
+    }
+
+    /**
      * @param string $quantity_html
      * @param array $cart_item
      * @param string $cart_item_key
@@ -1126,6 +1146,7 @@ class Aralco_WooCommerce_Connector {
             // Modify the price
             $cart_item['data']->set_price(doubleval($product->get_price()) / (10 ** $decimals));
         }
+        do_action('aralco_changed_quantity');
     }
 
     /**
@@ -1204,23 +1225,27 @@ class Aralco_WooCommerce_Connector {
 
     public function replace_quantity_field() {
         if (is_cart()) return;
-        /** @var $product WC_Product */
-        global $product;
-        $sell_by = get_post_meta($product->get_id(), '_aralco_sell_by', true);
+        global $post;
+        if(empty($post)) return;
+//        echo "<pre>" . print_r($post, true) . "</pre>";
+        $sell_by = get_post_meta($post->ID, '_aralco_sell_by', true);
         $is_unit = is_array($sell_by) && !empty($sell_by['code']);
         if($is_unit) {
             $decimal = (!empty($sell_by['decimals']))? $sell_by['decimals'] : 0;
             if ($decimal > 0) {
                 $min = number_format(1 / (10 ** $decimal), $decimal);
                 $size = $decimal + 4;
-                wc_enqueue_js(/** @lang JavaScript */ "$('input.qty').prop('value', '').prop('step', '${min}')
+                wc_enqueue_js(/** @lang JavaScript */ "$(function(){ if(window.ranQtySwitch) return; $('form.cart input.qty').prop('value', '').prop('step', '${min}')
 .prop('min', '${min}').prop('inputmode', 'decimal').prop('size', '${size}').css('width', '100px').attr('inputmode', 'decimal')
 .prop('name', '').after('<input type=\"hidden\" class=\"true-qty\" name=\"quantity\" value=\"\">');
 $('form.cart').on('submit', function() {
-    if(!document.querySelector('input.qty').value) return false;
-    let decVal = parseFloat(document.querySelector('input.qty').value);
-    document.querySelector('input.true-qty').value = decVal * Math.pow(10, ${decimal});
-})");
+    if(!document.querySelector('form.cart input.qty').value) return false;
+    let decVal = parseFloat(document.querySelector('form.cart input.qty').value);
+    document.querySelector('form.cart input.true-qty').value = decVal * Math.pow(10, ${decimal})
+});
+if(!$('form.cart input.qty').val()) $('form.cart input.qty').val('1');
+window.ranQtySwitch = true;
+});");
             }
             echo $sell_by['code'];
         }
@@ -1241,21 +1266,34 @@ $('form.cart').on('submit', function() {
             if ($decimal > 0) {
                 $min = number_format(1 / (10 ** $decimal), $decimal);
                 $repeated_snippet = /** @lang JavaScript */ "
-$('input[name=\"cart[$cart_item_key][qty]\"]').prop('min', '$min').prop('value',
-    parseInt($('input[name=\"cart[$cart_item_key][qty]\"]').prop('value')) / Math.pow(10, ${decimal})
-).prop('step', '$min').prop('inputmode', 'decimal').attr('inputmode', 'decimal').addClass('item-$cart_item_key')
-.prop('name', '').attr('name', '').on('keypress', function(e) {
-    if(e.which == 13) {
-        $(this).blur();
-        $('button[name=update_cart]').click();
-    }
-}).after('&nbsp;$code').after('<input type=\"hidden\" name=\"cart[$cart_item_key][qty]\" value=\"\">');
-$('form.woocommerce-cart-form').on('submit', function() {
-    let decVal = parseFloat(document.querySelector('input.item-$cart_item_key').value);
-    document.querySelector('input[name=\"cart[$cart_item_key][qty]\"]').value = decVal * Math.pow(10, ${decimal});
-});";
+if(!$('.woocommerce-cart-form input[name=\"cart[$cart_item_key][qty]\"]').data('processed')){
+    $('.woocommerce-cart-form input[name=\"cart[$cart_item_key][qty]\"]')
+        .hide()
+        .data('processed', true)
+        .after(
+            $('.woocommerce-cart-form input[name=\"cart[$cart_item_key][qty]\"]')
+            .clone(true)
+            .off()
+            .show()
+            .prop('min', '$min')
+            .prop('step', '$min')
+            .prop('name', '')
+            .prop('id', '')
+            .val(parseFloat($('.woocommerce-cart-form input[name=\"cart[$cart_item_key][qty]\"]').val() / Math.pow(10, ${decimal})))
+            .prop('value', parseFloat($('.woocommerce-cart-form input[name=\"cart[$cart_item_key][qty]\"]').val() / Math.pow(10, ${decimal})))
+            .on('change', function (e){
+                let multiple = Math.pow(10, ${decimal});
+                let val = Math.round($(this).val() * multiple) / multiple;
+                $(this).val(val);
+                $(this).prop('value', val);
+                $('.woocommerce-cart-form input[name=\"cart[$cart_item_key][qty]\"]').val(Math.round(val * multiple));
+            })
+        )
+        .removeClass('qty');
+}
+";
             } else {
-                $repeated_snippet = /** @lang JavaScript */ "$('input[name=\"cart[$cart_item_key][qty]\"]').after('&nbsp;$code')";
+                $repeated_snippet = /** @lang JavaScript */ "$('.woocommerce-cart-form input[name=\"cart[$cart_item_key][qty]\"]').after('&nbsp;$code')";
             }
             wc_enqueue_js(/** @lang JavaScript */ "$repeated_snippet
 $(document.body).on('updated_wc_div', function() {
@@ -1984,4 +2022,4 @@ require_once 'aralco-rest.php';
 require_once 'aralco-payment-gateway.php';
 require_once 'aralco-gift-card.php';
 
-new Aralco_WooCommerce_Connector();
+$ARALCO = new Aralco_WooCommerce_Connector();
