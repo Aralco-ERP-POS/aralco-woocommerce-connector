@@ -22,7 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 $options = get_option(ARALCO_SLUG . '_options');
-$use_quote = isset($options[ARALCO_SLUG . '_field_reference_number_enabled']) && $options[ARALCO_SLUG . '_field_reference_number_enabled'] == '1';
+$use_quote = isset($options[ARALCO_SLUG . '_field_order_quote_text']) && $options[ARALCO_SLUG . '_field_order_quote_text'] == '1';
 $points_enabled = isset($options[ARALCO_SLUG . '_field_enable_points']) && $options[ARALCO_SLUG . '_field_enable_points'] == '1';
 
 ?>

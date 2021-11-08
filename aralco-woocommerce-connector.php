@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.22.0
+ * Version: 1.22.1
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 5.3.0
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.22.0
+ * @version 1.22.1
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -420,6 +420,19 @@ class Aralco_WooCommerce_Connector {
                 'label_for' => ARALCO_SLUG . '_field_order_is_quote',
                 'required' => 'required',
                 'description' => 'When checked, any new orders will be sent to Aralco as a Quote instead of an Order'
+            ]
+        );
+
+        add_settings_field(
+            ARALCO_SLUG . '_field_order_quote_text',
+            __('Replace Word "Order"', ARALCO_SLUG),
+            array($this, 'field_checkbox'),
+            ARALCO_SLUG,
+            ARALCO_SLUG . '_order_section',
+            [
+                'label_for' => ARALCO_SLUG . '_field_order_quote_text',
+                'required' => 'required',
+                'description' => 'When checked, any instances of the word order are replaced with quote'
             ]
         );
 
@@ -1800,8 +1813,8 @@ $repeated_snippet
 
     public function endpoint_order_pay_title($title, $endpoint){
         $options = get_option(ARALCO_SLUG . '_options');
-        if(isset($options[ARALCO_SLUG . '_field_order_is_quote']) &&
-            $options[ARALCO_SLUG . '_field_order_is_quote'] == '1') {
+        if(isset($options[ARALCO_SLUG . '_field_order_quote_text']) &&
+            $options[ARALCO_SLUG . '_field_order_quote_text'] == '1') {
             $title = __( 'Pay for quote', 'woocommerce' );
         }
         return $title;
@@ -1809,8 +1822,8 @@ $repeated_snippet
 
     public function endpoint_order_received_title($title, $endpoint){
         $options = get_option(ARALCO_SLUG . '_options');
-        if(isset($options[ARALCO_SLUG . '_field_order_is_quote']) &&
-            $options[ARALCO_SLUG . '_field_order_is_quote'] == '1') {
+        if(isset($options[ARALCO_SLUG . '_field_order_quote_text']) &&
+            $options[ARALCO_SLUG . '_field_order_quote_text'] == '1') {
             $title = __( 'Quote created', 'woocommerce' );
         }
         return $title;
@@ -1818,8 +1831,8 @@ $repeated_snippet
 
     public function endpoint_orders_title($title, $endpoint){
         $options = get_option(ARALCO_SLUG . '_options');
-        if(isset($options[ARALCO_SLUG . '_field_order_is_quote']) &&
-            $options[ARALCO_SLUG . '_field_order_is_quote'] == '1') {
+        if(isset($options[ARALCO_SLUG . '_field_order_quote_text']) &&
+            $options[ARALCO_SLUG . '_field_order_quote_text'] == '1') {
             global $wp;
             if (!empty($wp->query_vars['orders'])) {
                 /* translators: %s: page */
@@ -1845,8 +1858,8 @@ $repeated_snippet
 
     public function account_menu_items($items){
         $options = get_option(ARALCO_SLUG . '_options');
-        if(isset($options[ARALCO_SLUG . '_field_order_is_quote']) &&
-            $options[ARALCO_SLUG . '_field_order_is_quote'] == '1') {
+        if(isset($options[ARALCO_SLUG . '_field_order_quote_text']) &&
+            $options[ARALCO_SLUG . '_field_order_quote_text'] == '1') {
             $items['orders'] = __('Quotes', ARALCO_SLUG);
         }
         return $items;
@@ -1854,8 +1867,8 @@ $repeated_snippet
 
     public function my_account_my_orders_columns($items){
         $options = get_option(ARALCO_SLUG . '_options');
-        if(isset($options[ARALCO_SLUG . '_field_order_is_quote']) &&
-            $options[ARALCO_SLUG . '_field_order_is_quote'] == '1') {
+        if(isset($options[ARALCO_SLUG . '_field_order_quote_text']) &&
+            $options[ARALCO_SLUG . '_field_order_quote_text'] == '1') {
             $items['order-number'] = esc_html__('Quote', ARALCO_SLUG);
         }
         return $items;
@@ -1863,8 +1876,8 @@ $repeated_snippet
 
     public function order_button_text($text) {
         $options = get_option(ARALCO_SLUG . '_options');
-        if (isset($options[ARALCO_SLUG . '_field_order_is_quote']) &&
-            $options[ARALCO_SLUG . '_field_order_is_quote'] == '1') {
+        if (isset($options[ARALCO_SLUG . '_field_order_quote_text']) &&
+            $options[ARALCO_SLUG . '_field_order_quote_text'] == '1') {
             $text = __('Create quote', ARALCO_SLUG);
         }
         return $text;
@@ -1872,8 +1885,8 @@ $repeated_snippet
 
     public function checkout_fields($fields) {
         $options = get_option(ARALCO_SLUG . '_options');
-        if (isset($options[ARALCO_SLUG . '_field_order_is_quote']) &&
-            $options[ARALCO_SLUG . '_field_order_is_quote'] == '1') {
+        if (isset($options[ARALCO_SLUG . '_field_order_quote_text']) &&
+            $options[ARALCO_SLUG . '_field_order_quote_text'] == '1') {
             $fields['order']['order_comments']['label'] = __('Quote notes', ARALCO_SLUG);
             $fields['order']['order_comments']['placeholder'] = esc_attr__(
                 'Notes about your quote, e.g. special notes for delivery.',
@@ -1884,8 +1897,8 @@ $repeated_snippet
 
     public function thankyou_order_received_text($text, $order) {
         $options = get_option(ARALCO_SLUG . '_options');
-        if (isset($options[ARALCO_SLUG . '_field_order_is_quote']) &&
-            $options[ARALCO_SLUG . '_field_order_is_quote'] == '1') {
+        if (isset($options[ARALCO_SLUG . '_field_order_quote_text']) &&
+            $options[ARALCO_SLUG . '_field_order_quote_text'] == '1') {
             $text = esc_html__( 'Thank you. Your quote has been created.', 'woocommerce' );
         }
         return $text;

@@ -81,8 +81,8 @@ if ( ! class_exists( 'WC_Email_Customer_Note_Aralco', false ) ) :
 		public function trigger( $args ) {
 			$this->setup_locale();
             $options = get_option(ARALCO_SLUG . '_options');
-            $trans_type = (isset($options[ARALCO_SLUG . '_field_order_is_quote']) &&
-                $options[ARALCO_SLUG . '_field_order_is_quote'] == '1') ? 'Quote' : 'Order';
+            $trans_type = (isset($options[ARALCO_SLUG . '_field_order_quote_text']) &&
+                $options[ARALCO_SLUG . '_field_order_quote_text'] == '1') ? 'Quote' : 'Order';
 
 			if ( ! empty( $args ) ) {
 				$defaults = array(

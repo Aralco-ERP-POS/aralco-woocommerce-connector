@@ -20,7 +20,7 @@
 defined( 'ABSPATH' ) || exit;
 
 $options = get_option(ARALCO_SLUG . '_options');
-$use_quote = isset($options[ARALCO_SLUG . '_field_reference_number_enabled']) && $options[ARALCO_SLUG . '_field_reference_number_enabled'] == '1';
+$use_quote = isset($options[ARALCO_SLUG . '_field_order_quote_text']) && $options[ARALCO_SLUG . '_field_order_quote_text'] == '1';
 
 $notes = $order->get_customer_order_notes();
 ?>

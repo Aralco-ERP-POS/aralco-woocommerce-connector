@@ -79,8 +79,8 @@ if ( ! class_exists( 'WC_Email_Cancelled_Order_Aralco', false ) ) :
 		public function trigger( $order_id, $order = false ) {
 			$this->setup_locale();
             $options = get_option(ARALCO_SLUG . '_options');
-            $trans_type = (isset($options[ARALCO_SLUG . '_field_order_is_quote']) &&
-                $options[ARALCO_SLUG . '_field_order_is_quote'] == '1') ? 'Quote' : 'Order';
+            $trans_type = (isset($options[ARALCO_SLUG . '_field_order_quote_text']) &&
+                $options[ARALCO_SLUG . '_field_order_quote_text'] == '1') ? 'Quote' : 'Order';
 
 			if ( $order_id && ! is_a( $order, 'WC_Order' ) ) {
 				$order = wc_get_order( $order_id );

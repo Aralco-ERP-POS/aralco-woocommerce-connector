@@ -159,8 +159,8 @@ if ( ! class_exists( 'WC_Email_Customer_Refunded_Order_Aralco', false ) ) :
 			$this->partial_refund = $partial_refund;
 			$this->id             = $this->partial_refund ? 'customer_partially_refunded_order' : 'customer_refunded_order';
             $options = get_option(ARALCO_SLUG . '_options');
-            $trans_type = (isset($options[ARALCO_SLUG . '_field_order_is_quote']) &&
-                $options[ARALCO_SLUG . '_field_order_is_quote'] == '1') ? 'Quote' : 'Order';
+            $trans_type = (isset($options[ARALCO_SLUG . '_field_order_quote_text']) &&
+                $options[ARALCO_SLUG . '_field_order_quote_text'] == '1') ? 'Quote' : 'Order';
 
 			if ( $order_id ) {
 				$this->object                         = wc_get_order( $order_id );
