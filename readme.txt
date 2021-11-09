@@ -1,7 +1,7 @@
 === Aralco WooCommerce Connector ===
 Contributors: elias_turner, Aralco
 Tags: ecommerce
-Stable tag: 1.22.1
+Stable tag: 1.22.2
 Tested up to: 5.7.2
 Requires at least: 5.0
 Requires PHP: 7.2

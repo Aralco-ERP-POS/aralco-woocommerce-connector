@@ -1644,6 +1644,8 @@ class Aralco_Processing_Helper {
             array_push($aralco_order['items'], $item_to_push);
         }
 
+        $aralco_order = apply_filters('aralco_order_json', $aralco_order);
+
         if (isset($just_return) && $just_return) return $aralco_order;
 
         update_post_meta($order_id, '_aralco_order_array', $aralco_order);
