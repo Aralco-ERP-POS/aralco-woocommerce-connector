@@ -85,6 +85,8 @@ class Aralco_Processing_Helper {
 
             $count = 0;
             $errors = array();
+            global $temp_supplier_mapping;
+            $temp_supplier_mapping = get_option(ARALCO_SLUG . '_supplier_mapping', array());
             foreach($products as $item){
                 $count++;
                 $result = Aralco_Processing_Helper::process_item($item);
@@ -375,6 +377,30 @@ class Aralco_Processing_Helper {
             wp_set_object_terms($post_id, $terms, wc_attribute_taxonomy_name('aralco-flags'));
             update_post_meta($post_id, '_product_attributes', $product_attributes);
 
+        } catch (Exception $exception) {} //Ignored
+        try {
+            global $temp_supplier_mapping;
+            if(isset($temp_supplier_mapping)) {
+                $suppliers = array();
+                foreach ($item['Product']['SupplierIDs'] as $supplier_id) {
+                    if (isset($temp_supplier_mapping[$supplier_id])) {
+                        array_push($suppliers, $temp_supplier_mapping[$supplier_id]);
+                    }
+                }
+
+                $product_attributes = get_post_meta($post_id, '_product_attributes', true);
+                if(!is_array($product_attributes)) $product_attributes = array();
+                $product_attributes[wc_attribute_taxonomy_name('suppliers')] = array(
+                    'name' => wc_attribute_taxonomy_name('suppliers'),
+                    'value' => '',
+                    'position' => 0,
+                    'is_visible' => '1',
+                    'is_variation' => '0',
+                    'is_taxonomy' => '1'
+                );
+                wp_set_object_terms($post_id, $suppliers, wc_attribute_taxonomy_name('suppliers'));
+                update_post_meta($post_id, '_product_attributes', $product_attributes);
+            }
         } catch (Exception $exception) {} //Ignored
 
         Aralco_Processing_Helper::process_product_grouping($post_id, $item);
@@ -1140,6 +1166,59 @@ class Aralco_Processing_Helper {
             } catch (Exception $e) {}
             update_option(ARALCO_SLUG . '_last_sync_grouping_count', $count);
         }
+        return true;
+    }
+
+    static function sync_suppliers() {
+        try {
+            $start_time = new DateTime();
+        } catch (Exception $e) {}
+
+        $taxonomy = wc_attribute_taxonomy_name('suppliers');
+        $does_exist = taxonomy_exists($taxonomy);
+        if($does_exist) {
+
+            $suppliers = Aralco_Connection_Helper::getSuppliers();
+            $count = 0;
+            $supplier_mapping = array();
+
+            foreach ($suppliers as $index => $supplier) {
+                $slug = sprintf('%s-val-%s-%d', $taxonomy, Aralco_Util::sanitize_name($supplier['SupplierCode']), $supplier['SupplierID']);
+                $existing = get_term_by('slug', $slug, $taxonomy);
+                if ($existing == false) {
+                    $result = wp_insert_term($supplier['Name'], $taxonomy, array(
+                        'slug' => $slug,
+                        'description' => ''
+                    ));
+                    if ($result instanceof WP_Error) {
+//                        return $result;
+                        // Ignore and continue for now. //TODO
+                        continue;
+                    }
+                    $id = $result['term_id'];
+                } else {
+                    $id = $existing->term_id;
+                    wp_update_term($id, $taxonomy, array(
+                        'name' => $supplier['Name']
+                    ));
+                }
+                delete_term_meta($id, 'order');
+                add_term_meta($id, 'order', $count);
+                delete_term_meta($id, 'order_' . $taxonomy);
+                add_term_meta($id, 'order_' . $taxonomy, $count);
+                $supplier_mapping[$supplier['SupplierID']] = $supplier['Name'];
+                $count++;
+            }
+
+            update_option(ARALCO_SLUG . '_supplier_mapping', $supplier_mapping);
+        }
+
+        try {
+            $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
+            update_option(ARALCO_SLUG . '_last_sync_duration_suppliers', $time_taken);
+        } catch (Exception $e) {}
+        update_option(ARALCO_SLUG . '_last_sync_suppliers_count', $count);
+
         return true;
     }
 

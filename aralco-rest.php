@@ -96,6 +96,10 @@ function aralco_new_sync() {
         $chunk_data['queue'][] = 'grids_init';
         $chunk_data['queue'][] = 'grids';
     }
+    if(isset($_GET['sync-suppliers'])){
+        $chunk_data['queue'][] = 'suppliers_init';
+        $chunk_data['queue'][] = 'suppliers';
+    }
     if(isset($_GET['sync-products'])){
         $chunk_data['queue'][] = 'products_init';
         $chunk_data['queue'][] = 'products';
@@ -229,6 +233,20 @@ function aralco_continue_sync() {
                 if(count($chunk_data['data']) <= 0){
                     array_shift($chunk_data['queue']);
                 }
+                break;
+            case 'suppliers_init':
+                $chunk_data['total'] = 1;
+                $chunk_data['progress'] = 0;
+                $message = 'Preparing to sync suppliers...';
+                array_shift($chunk_data['queue']);
+                break;
+            case 'suppliers':
+                $result = Aralco_Processing_Helper::sync_suppliers();
+//                if($result instanceof WP_Error) return $result;
+                $chunk_data['total'] = 1;
+                $chunk_data['progress'] = 1;
+                $message = 'Syncing suppliers...';
+                array_shift($chunk_data['queue']);
                 break;
             case 'products_init':
                 $result = Aralco_Processing_Helper::process_disabled_products();

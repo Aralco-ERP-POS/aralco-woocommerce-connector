@@ -14,7 +14,7 @@
  * WC tested up to: 5.3.0
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.22.2
+ * @version 1.23.0
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -97,7 +97,8 @@ class Aralco_WooCommerce_Connector {
             add_action('template_redirect', array($this, 'require_customer_login'));
 
             // register custom product taxonomy
-            add_action('admin_init', array($this, 'register_product_taxonomy'));
+            add_action('admin_init', array($this, 'register_aralco_flags_taxonomy'));
+            add_action('admin_init', array($this, 'register_supplier_taxonomy'));
 
             // register template overrides
             add_filter('woocommerce_locate_template', array($this, 'woocommerce_locate_template'), 10, 3);
@@ -379,6 +380,7 @@ class Aralco_WooCommerce_Connector {
                     'Departments' => 'departments',
                     'Groupings' => 'groupings',
                     'Grids' => 'grids',
+                    'Suppliers' => 'suppliers',
                     'Products' => 'products',
                     'Stock' => 'stock',
                     'Customer Groups' => 'customer_groups',
@@ -857,6 +859,13 @@ class Aralco_WooCommerce_Connector {
             } else {
                 update_option(ARALCO_SLUG . '_last_sync_grid_count', 0);
                 update_option(ARALCO_SLUG . '_last_sync_duration_grids', 0);
+            }
+
+            if(in_array('suppliers', $options)) {
+                Aralco_Processing_Helper::sync_suppliers();
+            } else {
+                update_option(ARALCO_SLUG . '_last_sync_suppliers_count', 0);
+                update_option(ARALCO_SLUG . '_last_sync_duration_suppliers', 0);
             }
 
             if(in_array('products', $options)) {
@@ -1907,7 +1916,7 @@ $repeated_snippet
     /**
      * Registers the built in product taxonomy for tracking if a product is new, on special, or on clearance
      */
-    public function register_product_taxonomy() {
+    public function register_aralco_flags_taxonomy() {
         $taxonomy = wc_attribute_taxonomy_name('aralco-flags');
 
         // Create the Taxonomy
@@ -1939,6 +1948,24 @@ $repeated_snippet
                 add_term_meta($id, 'order', $index);
                 add_term_meta($id, 'order_' . $taxonomy, $index);
             }
+        }
+    }
+
+    /**
+     * Registers the built in product taxonomy for tracking if a product is new, on special, or on clearance
+     */
+    public function register_supplier_taxonomy() {
+        $taxonomy = wc_attribute_taxonomy_name('suppliers');
+
+        // Create the Taxonomy
+        if(!taxonomy_exists($taxonomy)){
+            wc_create_attribute(array(
+                'name' => 'Suppliers',
+                'slug' => $taxonomy,
+                'type' => 'select',
+                'order_by' => 'name',
+                'has_archives' => true
+            ));
         }
     }
 

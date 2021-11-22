@@ -195,6 +195,7 @@ require_once(ABSPATH.'wp-admin/includes/plugin.php');
             <label><input type="checkbox" name="sync-departments">Departments</label>
             <label><input type="checkbox" name="sync-groupings">Groupings</label>
             <label><input type="checkbox" name="sync-grids">Grids</label>
+            <label><input type="checkbox" name="sync-suppliers">Suppliers</label>
             <label><input type="checkbox" name="sync-products" checked="checked">Products</label>
             <label><input type="checkbox" name="sync-stock" checked="checked">Stock</label>
             <label><input type="checkbox" name="sync-customer-groups" checked="checked">Customer Groups</label>
@@ -209,6 +210,7 @@ require_once(ABSPATH.'wp-admin/includes/plugin.php');
             <label><input type="checkbox" name="sync-departments">Departments</label>
             <label><input type="checkbox" name="sync-groupings">Groupings</label>
             <label><input type="checkbox" name="sync-grids">Grids</label>
+            <label><input type="checkbox" name="sync-suppliers">Suppliers</label>
             <label><input type="checkbox" name="sync-products" checked="checked">Products</label>
             <label><input type="checkbox" name="sync-stock" checked="checked">Stock</label>
             <label><input type="checkbox" name="sync-customer-groups" checked="checked">Customer Groups</label>
