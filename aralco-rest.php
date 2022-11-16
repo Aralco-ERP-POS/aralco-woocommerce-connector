@@ -151,13 +151,14 @@ function aralco_new_sync() {
 
 function aralco_continue_sync() {
     $chunk_data = get_option(ARALCO_SLUG . '_chunking_data');
+    $options = get_option(ARALCO_SLUG . '_options');
     if (!is_array($chunk_data)) { // No sync was started. Called out of order?
         return new WP_Error(ARALCO_SLUG . '_nothing_to_continue', 'There is no sync to continue. Please start one first.', ['status' => 400]);
     }
 
     $message = 'Unknown status';
     $complete = 0;
-    $chunked_amount = intval(get_option(ARALCO_SLUG . '_sync_chunking', 20));
+    $chunked_amount = intval($options[ARALCO_SLUG . '_field_sync_chunking']);
     $warnings = [];
 
     if(count($chunk_data['queue']) > 0) {
@@ -187,26 +188,35 @@ function aralco_continue_sync() {
                 }
                 break;
             case 'groupings_init':
-                $groupings = Aralco_Connection_Helper::getGroupings();
-                if($groupings instanceof WP_Error) return $groupings;
-                $chunk_data['data'] = $groupings;
-                $chunk_data['total'] = count($groupings);
+                $chunk_data['data'] = [];
+                $chunk_data['page'] = 0;
+                $chunk_data['number_of_pages'] = 1;
+                $chunk_data['number_of_records'] = 1;
+                $chunk_data['total'] = 1;
                 $chunk_data['progress'] = 0;
                 $message = 'Preparing to sync groupings...';
                 array_shift($chunk_data['queue']);
                 break;
             case 'groupings':
-                $left = count($chunk_data['data']);
-                if ($chunked_amount > $left) $chunked_amount = $left;
-                if($chunked_amount > 0){
-                    $chunk_to_process = array_slice($chunk_data['data'], 0, $chunked_amount);
+                $chunk_data['page']++;
+                if($chunk_data['page'] <= $chunk_data['number_of_pages']) {
+                    $groupings_result = Aralco_Connection_Helper::getGroupings($chunk_data['number_of_records'] <= 1, $chunk_data['page'], $chunked_amount);
+                    if($groupings_result instanceof WP_Error) return $groupings_result;
+                    $chunk_to_process = $groupings_result['data'];
+                    if($groupings_result['number_of_records'] > 0) {
+                        $chunk_data['number_of_records'] = $groupings_result['number_of_records'];
+                    }
+                    if($groupings_result['number_of_records'] > 0) {
+                        $chunk_data['number_of_records'] = $groupings_result['number_of_records'];
+                    }
                     $result = Aralco_Processing_Helper::sync_groupings($chunk_to_process);
                     if($result instanceof WP_Error) return $result;
-                    $chunk_data['data'] = array_slice($chunk_data['data'], $chunked_amount);
                 }
                 $message = 'Syncing groupings...';
-                $chunk_data['progress'] = $chunk_data['total'] - $left + $chunked_amount;
-                if(count($chunk_data['data']) <= 0){
+                $chunk_data['progress'] = $chunk_data['page'] * $chunked_amount;
+                $chunk_data['total'] = $chunk_data['number_of_records'];
+                if($chunk_data['progress'] >= $chunk_data['total']) {
+                    $chunk_data['progress'] = $chunk_data['total'];
                     array_shift($chunk_data['queue']);
                 }
                 break;
@@ -255,19 +265,23 @@ function aralco_continue_sync() {
                 if($result instanceof WP_Error) return $result;
                 $result = Aralco_Processing_Helper::process_giftcard_product();
                 if($result instanceof WP_Error) return $result;
-                $products = Aralco_Connection_Helper::getProducts($chunk_data['last_sync']);
-                if($products instanceof WP_Error) return $products;
-                $chunk_data['data'] = $products;
-                $chunk_data['total'] = count($products);
+                $chunk_data['data'] = [];
+                $chunk_data['page'] = 0;
+                $chunk_data['number_of_pages'] = 1;
+                $chunk_data['number_of_records'] = 1;
+                $chunk_data['total'] = 1;
                 $chunk_data['progress'] = 0;
                 $message = 'Preparing to sync products...';
                 array_shift($chunk_data['queue']);
                 break;
             case 'products':
-                $left = count($chunk_data['data']);
-                if ($chunked_amount > $left) $chunked_amount = $left;
-                if($chunked_amount > 0){
-                    $chunk_to_process = array_slice($chunk_data['data'], 0, $chunked_amount);
+                $chunk_data['page']++;
+                if($chunk_data['page'] <= $chunk_data['number_of_pages']) {
+                    $product_update = Aralco_Connection_Helper::getProducts($chunk_data['last_sync'], $chunk_data['page'], $chunked_amount);
+                    if($product_update instanceof WP_Error) return $product_update;
+                    $chunk_to_process = $product_update['data'];
+                    $chunk_data['number_of_pages'] = $product_update['number_of_pages'];
+                    $chunk_data['number_of_records'] = $product_update['number_of_records'];
                     $result = Aralco_Processing_Helper::sync_products(false, $chunk_to_process);
                     if($result instanceof WP_Error) return $result;
                     if(is_array($result)){
@@ -283,11 +297,12 @@ function aralco_continue_sync() {
                             }
                         }
                     }
-                    $chunk_data['data'] = array_slice($chunk_data['data'], $chunked_amount);
                 }
                 $message = 'Syncing products...';
-                $chunk_data['progress'] = $chunk_data['total'] - $left + $chunked_amount;
-                if(count($chunk_data['data']) <= 0){
+                $chunk_data['progress'] = $chunk_data['page'] * $chunked_amount;
+                $chunk_data['total'] = $chunk_data['number_of_records'];
+                if($chunk_data['progress'] >= $chunk_data['total']) {
+                    $chunk_data['progress'] = $chunk_data['total'];
                     array_shift($chunk_data['queue']);
                 }
                 break;

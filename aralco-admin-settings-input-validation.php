@@ -168,8 +168,8 @@ function aralco_validate_config($input) {
     if ((new Number_Validator(
         ARALCO_SLUG . '_field_sync_chunking',
         array(
-            'min' => 10,
-            'max' => 1000
+            'min' => 1,
+            'max' => 100000
         )
     ))->is_valid($input[ARALCO_SLUG . '_field_sync_chunking']) == false) $valid = false;
 

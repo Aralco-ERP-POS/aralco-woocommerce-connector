@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.22.2
+ * Version: 1.24.0
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 5.3.0
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.23.0
+ * @version 1.24.0
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -319,8 +319,8 @@ class Aralco_WooCommerce_Connector {
             [
                 'type' => 'number',
                 'step' => '1',
-                'min' => '10',
-                'max' => '1000',
+                'min' => '1',
+                'max' => '100000',
                 'label_for' => ARALCO_SLUG . '_field_sync_chunking',
                 'description' => 'Used to determine the amount of items to process per chunk when doing a manual sync. 20 is the recommended but lower it if you have timeout issues. Raising it provides no benefit. A lower value can cause longer syncs.',
                 'class' => ARALCO_SLUG . '_row',
@@ -809,23 +809,24 @@ class Aralco_WooCommerce_Connector {
      * Use to fix all the tax stamps on all the products without syncing everything
      */
     public function fix_stamped_taxes() {
-        $aralco_products = Aralco_Connection_Helper::getProducts(date("Y-m-d\TH:i:s", mktime(0, 0, 0, 1, 1, 1900)));
-        if(is_array($aralco_products)) { // Got Data
-            foreach ($aralco_products as $item){
-                $args = array(
-                    'posts_per_page'    => 1,
-                    'post_type'         => 'product',
-                    'meta_key'          => '_aralco_id',
-                    'meta_value'        => strval($item['ProductID']),
-                    'post_status'       => array('publish', 'pending', 'draft', 'auto-draft', 'future', 'private', 'inherit', 'trash')
-                );
-                $results = (new WP_Query($args))->get_posts();
-                if (count($results) > 0){
-                    $post_id = $results[0]->ID;
-                    update_post_meta($post_id, '_aralco_taxes', $item['Product']['Taxes']);
-                }
-            }
-        }
+        return;
+//        $aralco_products = Aralco_Connection_Helper::getProducts(date("Y-m-d\TH:i:s", mktime(0, 0, 0, 1, 1, 1900)));
+//        if(is_array($aralco_products)) { // Got Data
+//            foreach ($aralco_products as $item){
+//                $args = array(
+//                    'posts_per_page'    => 1,
+//                    'post_type'         => 'product',
+//                    'meta_key'          => '_aralco_id',
+//                    'meta_value'        => strval($item['ProductID']),
+//                    'post_status'       => array('publish', 'pending', 'draft', 'auto-draft', 'future', 'private', 'inherit', 'trash')
+//                );
+//                $results = (new WP_Query($args))->get_posts();
+//                if (count($results) > 0){
+//                    $post_id = $results[0]->ID;
+//                    update_post_meta($post_id, '_aralco_taxes', $item['Product']['Taxes']);
+//                }
+//            }
+//        }
     }
 
     /**

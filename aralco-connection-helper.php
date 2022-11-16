@@ -244,7 +244,7 @@ class Aralco_Connection_Helper {
      * @param string $start_time as timestamp
      * @return array|WP_Error
      */
-    static function getProducts($start_time = "1900-01-01T00:00:00") {
+    static function getProducts($start_time = "1900-01-01T00:00:00", $page = 1, $per_page = -1) {
         if(!Aralco_Connection_Helper::hasValidConfig()){
             return new WP_Error(ARALCO_SLUG . '_invalid_config', 'You must save the connection settings before you can test them.');
         }
@@ -252,18 +252,28 @@ class Aralco_Connection_Helper {
         $options = get_option(ARALCO_SLUG . '_options');
         $curl = curl_init();
         curl_setopt($curl, CURLOPT_URL, $options[ARALCO_SLUG . '_field_api_location'] .
-                                        'api/Product/Updated?from=' . $start_time . '&wGrouping=true&wGroupPrice=true&wTax=true');
+                                        'api/Product/Updated?from=' . $start_time . '&wGrouping=true&wGroupPrice=true&wTax=true&page=' . $page . '&perPage=' . $per_page);
         curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false); // Disable SSL verification
         curl_setopt($curl, CURLOPT_RETURNTRANSFER, true); // Return instead of printing
         curl_setopt($curl, CURLOPT_HTTPHEADER, array(
             'Authorization: Basic ' . $options[ARALCO_SLUG . '_field_api_token']
         )); // Basic Auth
-        $data = curl_exec($curl); // Get cURL result body
+        curl_setopt($curl, CURLOPT_HEADER, true);
+        $result = curl_exec($curl); // Get cURL result body
+
         $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        $headerSize = curl_getinfo($curl, CURLINFO_HEADER_SIZE);
+        $headers = Aralco_Connection_Helper::headersToArray(substr($result, 0, $headerSize));
+        $data = substr($result, $headerSize);
+
         curl_close($curl); // Close the cURL handler
 
         if($http_code == 200){
-            return json_decode($data, true); // Retrieval Successful.
+            return [
+                'data' => json_decode($data, true), // Retrieval Successful.
+                'number_of_pages' => (int)$headers['number-of-pages'],
+                'number_of_records' => (int)$headers['number-of-records'],
+            ];
         }
 
         $message = "Unknown Error";
@@ -544,23 +554,33 @@ class Aralco_Connection_Helper {
      *
      * @return array|WP_Error The product groupings or WP_Error on failure
      */
-    static function getGroupings(){
+    static function getGroupings($get_count = false, $page = 1, $per_page = -1){
         $options = get_option(ARALCO_SLUG . '_options');
 
         $curl = curl_init();
         curl_setopt($curl, CURLOPT_URL, $options[ARALCO_SLUG . '_field_api_location'] .
-            'api/Grouping/GetAll');
+            'api/Grouping/GetAll?getCount=' . $get_count . 'page=' . $page . '&perPage=' . $per_page);
         curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false); // Disable SSL verification
         curl_setopt($curl, CURLOPT_RETURNTRANSFER, true); // Return instead of printing
         curl_setopt($curl, CURLOPT_HTTPHEADER, array(
             'Authorization: Basic ' . $options[ARALCO_SLUG . '_field_api_token']
         )); // Basic Auth
-        $data = curl_exec($curl); // Get cURL result body
+        curl_setopt($curl, CURLOPT_HEADER, true);
+        $result = curl_exec($curl); // Get cURL result body
+
         $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        $headerSize = curl_getinfo($curl, CURLINFO_HEADER_SIZE);
+        $headers = Aralco_Connection_Helper::headersToArray(substr($result, 0, $headerSize));
+        $data = substr($result, $headerSize);
+
         curl_close($curl); // Close the cURL handler
 
         if($http_code == 200){
-            return json_decode($data, true);
+            return [
+                'data' => json_decode($data, true), // Retrieval Successful.
+                'number_of_pages' => (int)$headers['number-of-pages'],
+                'number_of_records' => (int)$headers['number-of-records'],
+            ];
         }
 
         $message = "Unknown Error";
@@ -1107,5 +1127,22 @@ class Aralco_Connection_Helper {
             ARALCO_SLUG . '_order_failed',
             __('Order Creation Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG)
         );
+    }
+
+    static function headersToArray($str) {
+        $headers = array();
+        $headersTmpArray = explode("\r\n" , $str);
+        for ($i = 0 ; $i < count($headersTmpArray) ; ++$i) {
+            // we dont care about the two \r\n lines at the end of the headers
+            if (strlen($headersTmpArray[$i]) > 0) {
+                // the headers start with HTTP status codes, which do not contain a colon so we can filter them out too
+                if (strpos($headersTmpArray[$i] , ":")) {
+                    $headerName = substr($headersTmpArray[$i] , 0 , strpos($headersTmpArray[$i] , ":"));
+                    $headerValue = substr($headersTmpArray[$i] , strpos($headersTmpArray[$i] , ":") + 1);
+                    $headers[$headerName] = $headerValue;
+                }
+            }
+        }
+        return $headers;
     }
 }

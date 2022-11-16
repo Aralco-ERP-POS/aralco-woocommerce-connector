@@ -68,8 +68,9 @@ class Aralco_Processing_Helper {
             $result = Aralco_Processing_Helper::process_disabled_products();
             if ($result instanceof WP_Error) return $result;
 
-            $products = Aralco_Connection_Helper::getProducts($lastSync);
-            if ($products instanceof WP_Error) return $products;
+            $product_updates = Aralco_Connection_Helper::getProducts($lastSync);
+            if ($product_updates instanceof WP_Error) return $product_updates;
+            $products = $product_updates['data'];
         } else {
             global $temp_shipping_product_code;
             $temp_shipping_product_code = get_option(ARALCO_SLUG . '_shipping_product_code', null);
@@ -1085,7 +1086,9 @@ class Aralco_Processing_Helper {
             try {
                 $start_time = new DateTime();
             } catch (Exception $e) {}
-            $groupings_raw = Aralco_Connection_Helper::getGroupings();
+            $groupings_result = Aralco_Connection_Helper::getGroupings();
+            if ($groupings_result instanceof WP_Error) return $groupings_result;
+            $groupings_raw = $groupings_result['data'];
         }
 
         $groupings = array();
@@ -1726,6 +1729,8 @@ class Aralco_Processing_Helper {
         $aralco_order = apply_filters('aralco_order_json', $aralco_order);
 
         if (isset($just_return) && $just_return) return $aralco_order;
+
+        update_option('aralco_last_submission', $aralco_order);
 
         update_post_meta($order_id, '_aralco_order_array', $aralco_order);
 
