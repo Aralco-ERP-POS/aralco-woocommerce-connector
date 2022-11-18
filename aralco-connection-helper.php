@@ -1139,7 +1139,7 @@ class Aralco_Connection_Helper {
                 if (strpos($headersTmpArray[$i] , ":")) {
                     $headerName = substr($headersTmpArray[$i] , 0 , strpos($headersTmpArray[$i] , ":"));
                     $headerValue = substr($headersTmpArray[$i] , strpos($headersTmpArray[$i] , ":") + 1);
-                    $headers[$headerName] = $headerValue;
+                    $headers[strtolower($headerName)] = $headerValue;
                 }
             }
         }
