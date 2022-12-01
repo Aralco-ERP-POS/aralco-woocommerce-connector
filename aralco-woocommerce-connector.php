@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.24.2
+ * Version: 1.24.3
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 5.3.0
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.24.2
+ * @version 1.24.3
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -528,6 +528,25 @@ class Aralco_WooCommerce_Connector {
         );
 
         add_settings_field(
+            ARALCO_SLUG . '_field_store_id_stock_from',
+            __('Stock From Store', ARALCO_SLUG),
+            array($this, 'field_input'),
+            ARALCO_SLUG,
+            ARALCO_SLUG . '_order_section',
+            [
+                'type' => 'number',
+                'step' => '1',
+                'min' => '0',
+                'max' => '999999',
+                'label_for' => ARALCO_SLUG . '_field_store_id_stock_from',
+                'class' => ARALCO_SLUG . '_row',
+                'placeholder' => '1',
+                'required' => 'required',
+                'description' => 'The ID of the store to sync stock from.'
+            ]
+        );
+
+        add_settings_field(
             ARALCO_SLUG . '_field_tender_code',
             __('Tender Code', ARALCO_SLUG),
             array($this, 'field_input'),
@@ -766,6 +785,20 @@ class Aralco_WooCommerce_Connector {
         $result = 0;
         global $wpdb;
 
+        // Add Meta
+        $args = array(
+            'post_type' => 'product',
+            'posts_per_page' => -1
+        );
+        $loop = new WP_Query( $args );
+        foreach($loop->posts as $post) {
+            $stock = get_post_meta($post->ID, '_stock', true);
+            if (!$stock) {
+                update_post_meta($post->ID, '_stock', 0);
+            }
+            update_post_meta($post->ID, '_manage_stock', 'yes');
+        }
+
         foreach (array(
             array('<=', $backorder_stock_status),
             array('>', 'instock')
@@ -775,9 +808,19 @@ class Aralco_WooCommerce_Connector {
             foreach ($rows as $row) {
                 $ids[] = $row['post_id'];
             }
+
+            if(count($rows) <= 0) continue; // Nothing to do.
+
             $ids = implode(', ', $ids);
 
             $q = "UPDATE {$wpdb->prefix}postmeta SET meta_value = '{$operation[1]}' WHERE meta_key = '_stock_status' AND post_id IN ({$ids})";
+
+//            add_settings_error(
+//                ARALCO_SLUG . '_messages',
+//                ARALCO_SLUG . '_messages_2',
+//                "SELECT DISTINCT post_id FROM {$wpdb->prefix}postmeta WHERE meta_key = '_stock' AND meta_value {$operation[0]} 0",//print_r($rows, true),
+//                'error'
+//            );
 
             $temp_result = $wpdb->query($q);
             if ($temp_result === false) {
@@ -786,7 +829,6 @@ class Aralco_WooCommerce_Connector {
             }
             $result += $temp_result;
         }
-
 
         if($result === false) {
             add_settings_error(
@@ -1515,7 +1557,7 @@ $repeated_snippet
     public function cart_check_product_stock() {
 
         $products_to_update = [];
-        $store_id = get_option(ARALCO_SLUG . '_options')[ARALCO_SLUG . '_field_store_id'];
+        $store_id = get_option(ARALCO_SLUG . '_options')[ARALCO_SLUG . '_field_store_id_stock_from'];
 
         foreach (WC()->cart->get_cart() as $cart_item_key => $cart_item) {
             /** @var WC_Product $product_obj */

@@ -176,6 +176,7 @@ class Aralco_Processing_Helper {
     static function process_item($item) {
         global $temp_shipping_product_code;
         global $temp_giftcard_product_code;
+        $options = get_option(ARALCO_SLUG . '_options');
         if((!is_null($temp_shipping_product_code) && strcasecmp($temp_shipping_product_code, $item['Product']['Code']) == 0) ||
             (!is_null($temp_giftcard_product_code) && strcasecmp($temp_giftcard_product_code, $item['Product']['Code']) == 0)){
             $post_type = 'private';
@@ -291,21 +292,21 @@ class Aralco_Processing_Helper {
             try{
                 $product->set_catalog_visibility('visible');
             } catch(Exception $e) {}
-            $product->set_stock_status('instock');
-            $options = get_option(ARALCO_SLUG . '_options');
-            $backorders = ($options !== false &&
-                isset($options[ARALCO_SLUG . '_field_allow_backorders']) &&
-                $options[ARALCO_SLUG . '_field_allow_backorders'] == '1') ?
-                'notify' : 'no';
-            $product->set_backorders($backorders);
+            if($options !== false && isset($options[ARALCO_SLUG . '_field_allow_backorders']) && $options[ARALCO_SLUG . '_field_allow_backorders'] == '1'){
+                $product->set_backorders('notify');
+                $product->set_stock_status('onbackorder');
+            } else {
+                $product->set_backorders('no');
+                $product->set_stock_status('outofstock');
+            }
             $product->set_total_sales(0);
             $product->set_downloadable(false);
             $product->set_virtual(false);
-            if($has_dim) {
+//            if($has_dim) {
                 $product->set_manage_stock(true);
-            } else {
-                $product->set_manage_stock(false);
-            }
+//            } else {
+//                $product->set_manage_stock(false);
+//            }
         }
 
         $product->set_name($item['Product']['Name']);
@@ -534,10 +535,10 @@ class Aralco_Processing_Helper {
      * @return bool|WP_Error
      */
     static function process_product_variations($post_id, $aralco_product){
-
         // Build and register attributes
         $product_attributes = array();
         $invalid_grids = array();
+        $options = get_option(ARALCO_SLUG . '_options');
         for ($i = 1; $i < 5; $i++) {
             $dim_id = $aralco_product['Product']['DimensionId' . $i];
             if (isset($dim_id) && !empty($dim_id)) {
@@ -692,14 +693,14 @@ class Aralco_Processing_Helper {
 
             // Stock
             if($new) {
-                $options = get_option(ARALCO_SLUG . '_options');
-                $backorders = ($options !== false &&
-                    isset($options[ARALCO_SLUG . '_field_allow_backorders']) &&
-                    $options[ARALCO_SLUG . '_field_allow_backorders'] == '1') ?
-                    'notify' : 'no';
-                $variation->set_manage_stock(false);
-                $variation->set_backorders($backorders);
-                $variation->set_stock_status('');
+                if($options !== false && isset($options[ARALCO_SLUG . '_field_allow_backorders']) && $options[ARALCO_SLUG . '_field_allow_backorders'] == '1'){
+                    $variation->set_backorders('notify');
+                    $variation->set_stock_status('onbackorder');
+                } else {
+                    $variation->set_backorders('no');
+                    $variation->set_stock_status('outofstock');
+                }
+                $variation->set_manage_stock(true);
             }
 
             if(isset($aralco_product['Product']['WebProperties']['Weight'])){
@@ -784,7 +785,7 @@ class Aralco_Processing_Helper {
 
         foreach ($inventory as $index => $item){
             $options = get_option(ARALCO_SLUG . '_options');
-            if($item['StoreID'] != $options[ARALCO_SLUG . '_field_store_id']) continue;
+            if($item['StoreID'] != $options[ARALCO_SLUG . '_field_store_id_stock_from']) continue;
 
             $args = array(
                 'posts_per_page' => 1,
