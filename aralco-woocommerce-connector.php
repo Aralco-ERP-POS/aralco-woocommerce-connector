@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.24.3
+ * Version: 1.25.0
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 5.3.0
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.24.3
+ * @version 1.25.0
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -95,6 +95,10 @@ class Aralco_WooCommerce_Connector {
 
             // register login redirect hook
             add_action('template_redirect', array($this, 'require_customer_login'));
+
+            // register customer update hook
+            add_action('wp_login', array($this, 'trigger_update_customer_info'));
+            add_action('woocommerce_update_customer', array($this, 'update_customer_info'));
 
             // register custom product taxonomy
             add_action('admin_init', array($this, 'register_aralco_flags_taxonomy'));
@@ -1031,6 +1035,32 @@ class Aralco_WooCommerce_Connector {
         unset($data['password']); // Saving this to the DB would be confusing since we don't use it.
 
         update_user_meta($user->ID, 'aralco_data', $data);
+    }
+
+    /**
+     * Intermediary call to update customer profile on login
+     *
+     * @param $user_login string
+     */
+    public function trigger_update_customer_info($username) {
+        $user = get_user_by('login', $username);
+        try {
+            $this->update_customer_info($user->ID);
+        } catch (Exception $e) {
+            // Do Nothing
+        }
+    }
+
+    /**
+     * Update customer profile in Aralco
+     *
+     * @param $customer_id int
+     */
+    public function update_customer_info($customer_id) {
+        $aralco_data = get_user_meta($customer_id, "aralco_data", true);
+        if(!!$aralco_data && isset($aralco_data['id'])) {
+            Aralco_Processing_Helper::process_customer_update($customer_id, $aralco_data['id']);
+        }
     }
 
     public function intercept_lost_password_form() {

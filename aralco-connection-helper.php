@@ -1080,6 +1080,56 @@ class Aralco_Connection_Helper {
     }
 
     /**
+     * Updates an existing customer
+     *
+     * @param array $customer the customer data
+     * @return bool|WP_Error True on success, or WP_Error on failure
+     */
+    static function updateCustomer($customer) {
+        if(!Aralco_Connection_Helper::hasValidConfig()){
+            return new WP_Error(ARALCO_SLUG . '_invalid_config', 'You must save the connection settings before you can preform this action.');
+        }
+        $options = get_option(ARALCO_SLUG . '_options');
+        $curl = curl_init();
+        curl_setopt($curl, CURLOPT_URL, $options[ARALCO_SLUG . '_field_api_location'] .
+            'api/Customer/Update');
+        curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false); // Disable SSL verification
+        curl_setopt($curl, CURLOPT_RETURNTRANSFER, true); // Return instead of printing
+        curl_setopt($curl, CURLOPT_HTTPHEADER, array(
+            'Authorization: Basic ' . $options[ARALCO_SLUG . '_field_api_token'],
+            'Content-Type: application/json; charset=utf-8'
+        )); // Basic Auth and Content-Type for post
+        curl_setopt($curl, CURLOPT_POST, 1); // Set to POST instead of GET
+        curl_setopt($curl, CURLOPT_POSTFIELDS, json_encode($customer)); // Set Body
+        $data = curl_exec($curl); // Get cURL result body
+        $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        curl_close($curl); // Close the cURL handler
+
+        $baseInfo['CustomData'] = array();
+        if($http_code == 200){
+            return true;
+        }
+
+        $message = "Unknown error";
+        if (isset($data)){
+            if(strpos($data, '{') !== false){
+                $data = json_decode($data, true);
+                $message = $data['message'] . ' ';
+                if(isset($data['exceptionMessage'])){
+                    $message .= $data['exceptionMessage'];
+                }
+            } else {
+                $message = $data;
+            }
+        }
+
+        return new WP_Error(
+            ARALCO_SLUG . '_connection_failed',
+            __('Customer Update Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG)
+        );
+    }
+
+    /**
      * Creates a new order
      *
      * @param array $order the order to create

@@ -454,6 +454,7 @@ class Aralco_Processing_Helper {
         update_post_meta($post_id,'_product_image_gallery',''); // Removes the product gallery
 
         $images = Aralco_Connection_Helper::getImagesForProduct($item['ProductID'], $item['Product']['HasDimension']);
+        if($images instanceof WP_Error) return;
         $upload_dir = wp_upload_dir();
 
         foreach($images as $key => $image) {
@@ -1307,6 +1308,36 @@ class Aralco_Processing_Helper {
 //            'Phone'           => ''
         );
         return Aralco_Connection_Helper::createCustomer($customer);
+    }
+
+    /**
+     * update a customer in Aralco
+     *
+     * @param int $user_id the wordpress user's id.
+     * @param int $aralco_id the corresponding ID in aralco to update.
+     * @return bool|WP_Error true if updated, otherwise WP_Error
+     */
+    static function process_customer_update($user_id, $aralco_id){
+        try {
+            $user = new WC_Customer($user_id);
+        } catch (Exception $e) {
+            return new WP_Error(ARALCO_SLUG . '_customer_update_customer_not_found');
+        }
+        $aralco_data = get_user_meta($user_id, "aralco_data", true);
+        $customer = array(
+            'Username'        => $aralco_data['email'],
+            'Address1'        => $user->get_billing_address_1() ?? 'Unknown',
+            'Address2'        => $user->get_billing_address_2() ?? '',
+            'City'            => $user->get_billing_city() ?? '',
+            'Companyname'     => $user->get_billing_company() ?? '',
+            'Country'         => $user->get_billing_country() ?? 'Unknown',
+            'Name'            => $user->get_billing_first_name() ?? 'Unknown',
+            'Surname'         => $user->get_billing_last_name() ?? 'Unknown',
+            'Phone'           => $user->get_billing_phone() ?? '',
+            'ProvinceState'   => $user->get_billing_state() ?? 'Unknown',
+            'ZipPostalCode'   => $user->get_billing_postcode() ?? '',
+        );
+        return Aralco_Connection_Helper::updateCustomer($customer);
     }
 
     /**
