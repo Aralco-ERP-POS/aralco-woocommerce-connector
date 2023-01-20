@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.25.0
+ * Version: 1.25.1
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 5.3.0
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.25.0
+ * @version 1.25.1
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -1027,8 +1027,19 @@ class Aralco_WooCommerce_Connector {
             $data = Aralco_Connection_Helper::getCustomer('UserName', $user->user_email);
         }
 
-        if (!$data || $data instanceof WP_Error) {
-            // No aralco user was found. No meta will be pulled.
+        try {
+            if (!$data || $data instanceof WP_Error) {
+                // Must be a legacy customer. Create or link it.
+                $this->new_customer($user->ID);
+                $aralco_data = get_user_meta($user->ID, 'aralco_data', true);
+                $data = Aralco_Connection_Helper::getCustomer('Id', $aralco_data['id']);
+            }
+
+            if (!$data || $data instanceof WP_Error) {
+                // if it still doesn't exist, give up
+                return;
+            }
+        } catch (Exception $e) {
             return;
         }
 
