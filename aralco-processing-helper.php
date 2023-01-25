@@ -1095,7 +1095,7 @@ class Aralco_Processing_Helper {
 
         $groupings = array();
         foreach ($groupings_raw as $item) {
-            if (!empty($item['GroupingListID'])){
+            if (!empty($item['GroupingID'])){
                 if(!isset($groupings[$item['Group']])){
                     $groupings[$item['Group']] = array(
                         'group' => $item['Group'],

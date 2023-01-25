@@ -559,7 +559,7 @@ class Aralco_Connection_Helper {
 
         $curl = curl_init();
         curl_setopt($curl, CURLOPT_URL, $options[ARALCO_SLUG . '_field_api_location'] .
-            'api/Grouping/GetAll?getCount=' . (($get_count) ? 'true' : 'false') . '&page=' . $page . '&perPage=' . $per_page);
+            'api/Grouping/GetAllWithoutProduct?getCount=' . (($get_count) ? 'true' : 'false') . '&page=' . $page . '&perPage=' . $per_page);
         curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false); // Disable SSL verification
         curl_setopt($curl, CURLOPT_RETURNTRANSFER, true); // Return instead of printing
         curl_setopt($curl, CURLOPT_HTTPHEADER, array(
