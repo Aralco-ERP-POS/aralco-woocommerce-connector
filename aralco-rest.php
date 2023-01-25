@@ -206,8 +206,8 @@ function aralco_continue_sync() {
                     if($groupings_result['number_of_records'] > 0) {
                         $chunk_data['number_of_records'] = $groupings_result['number_of_records'];
                     }
-                    if($groupings_result['number_of_records'] > 0) {
-                        $chunk_data['number_of_records'] = $groupings_result['number_of_records'];
+                    if($groupings_result['number_of_pages'] > 0) {
+                        $chunk_data['number_of_pages'] = $groupings_result['number_of_pages'];
                     }
                     $result = Aralco_Processing_Helper::sync_groupings($chunk_to_process);
                     if($result instanceof WP_Error) return $result;
