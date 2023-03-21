@@ -66,6 +66,7 @@ function aralco_new_sync() {
     if(!isset($_GET['ignore'])) {
         $chunk_data = get_option(ARALCO_SLUG . '_chunking_data');
         if (is_array($chunk_data)) { // Sync was already started, send the information to resume it.
+            Aralco_WooCommerce_Connector::log_info("Resume manual sync");
             return [
                 'resume' => '1',
                 'statusText' => 'Resuming Sync...',
@@ -74,9 +75,17 @@ function aralco_new_sync() {
                 'nonce' => wp_create_nonce('wp_rest')
             ];
         }
+    } else {
+        Aralco_WooCommerce_Connector::log_info("Abandoning old manual sync");
     }
 
     $everything = isset($_GET['force-sync-now']);
+
+    if($everything){
+        Aralco_WooCommerce_Connector::log_info("Starting new manual FORCE sync");
+    } else {
+        Aralco_WooCommerce_Connector::log_info("Starting new manual sync");
+    }
 
     $chunk_data = array(
         'total' => 1,
@@ -128,16 +137,18 @@ function aralco_new_sync() {
 
     $server_time = Aralco_Connection_Helper::getServerTime();
     if($server_time instanceof WP_Error){
+        Aralco_WooCommerce_Connector::log_error("Getting server time failed", $server_time);
         return $server_time;
     } else if (is_array($server_time) && isset($server_time['UtcOffset'])) {
+        $server_time['UtcOffset'] -= 120; // Adds an extra 2 hours to the sync to adjust for server de-syncs
         $sign = ($server_time['UtcOffset'] > 0) ? '+' : '-';
-        $server_time['UtcOffset'] -= 60; // Adds an extra hour to the sync to adjust for server de-syncs
         if ($server_time['UtcOffset'] < 0) {
             $server_time['UtcOffset'] = $server_time['UtcOffset'] * -1;
         }
         $temp = DateTime::createFromFormat('Y-m-d\TH:i:s', $lastSync);
         $temp->modify($sign . $server_time['UtcOffset'] . ' minutes');
         $chunk_data['last_sync'] = $temp->format('Y-m-d\TH:i:s');
+        Aralco_WooCommerce_Connector::log_info("Getting updates since " . $chunk_data['last_sync'] . ' (last sync time minus 2 hours)');
     }
 
     update_option(ARALCO_SLUG . '_chunking_data', $chunk_data, 'no');
@@ -153,7 +164,9 @@ function aralco_continue_sync() {
     $chunk_data = get_option(ARALCO_SLUG . '_chunking_data');
     $options = get_option(ARALCO_SLUG . '_options');
     if (!is_array($chunk_data)) { // No sync was started. Called out of order?
-        return new WP_Error(ARALCO_SLUG . '_nothing_to_continue', 'There is no sync to continue. Please start one first.', ['status' => 400]);
+        $to_return = new WP_Error(ARALCO_SLUG . '_nothing_to_continue', 'There is no sync to continue. Please start one first.', ['status' => 400]);
+        Aralco_WooCommerce_Connector::log_error("Called continue sync when no sync was ongoing", $to_return);
+        return $to_return;
     }
 
     $message = 'Unknown status';
@@ -165,7 +178,10 @@ function aralco_continue_sync() {
         switch ($chunk_data['queue'][0]) {
             case 'departments_init':
                 $departments = Aralco_Connection_Helper::getDepartments();
-                if($departments instanceof WP_Error) return $departments;
+                if($departments instanceof WP_Error) {
+                    Aralco_WooCommerce_Connector::log_error("Error pre-fetching departments", $departments);
+                    return $departments;
+                }
                 $chunk_data['data'] = $departments;
                 $chunk_data['total'] = count($departments);
                 $chunk_data['progress'] = 0;
@@ -201,7 +217,10 @@ function aralco_continue_sync() {
                 $chunk_data['page']++;
                 if($chunk_data['page'] <= $chunk_data['number_of_pages']) {
                     $groupings_result = Aralco_Connection_Helper::getGroupings($chunk_data['number_of_records'] <= 1, $chunk_data['page'], $chunked_amount);
-                    if($groupings_result instanceof WP_Error) return $groupings_result;
+                    if($groupings_result instanceof WP_Error) {
+                        Aralco_WooCommerce_Connector::log_error("Error pre-fetching groupings", $groupings_result);
+                        return $groupings_result;
+                    }
                     $chunk_to_process = $groupings_result['data'];
                     if($groupings_result['number_of_records'] > 0) {
                         $chunk_data['number_of_records'] = $groupings_result['number_of_records'];
@@ -222,7 +241,10 @@ function aralco_continue_sync() {
                 break;
             case 'grids_init':
                 $grids = Aralco_Connection_Helper::getGrids();
-                if($grids instanceof WP_Error) return $grids;
+                if($grids instanceof WP_Error) {
+                    Aralco_WooCommerce_Connector::log_error("Error pre-fetching grids", $grids);
+                    return $grids;
+                }
                 $chunk_data['data'] = $grids;
                 $chunk_data['total'] = count($grids);
                 $chunk_data['progress'] = 0;
@@ -260,11 +282,20 @@ function aralco_continue_sync() {
                 break;
             case 'products_init':
                 $result = Aralco_Processing_Helper::process_disabled_products();
-                if($result instanceof WP_Error) return $result;
+                if($result instanceof WP_Error) {
+                    Aralco_WooCommerce_Connector::log_error("Error pr-processing disabled products", $result);
+                    return $result;
+                }
                 $result = Aralco_Processing_Helper::process_shipping_product();
-                if($result instanceof WP_Error) return $result;
+                if($result instanceof WP_Error) {
+                    Aralco_WooCommerce_Connector::log_error("Error pr-processing shipping product", $result);
+                    return $result;
+                }
                 $result = Aralco_Processing_Helper::process_giftcard_product();
-                if($result instanceof WP_Error) return $result;
+                if($result instanceof WP_Error) {
+                    Aralco_WooCommerce_Connector::log_error("Error pr-processing giftcard product", $result);
+                    return $result;
+                }
                 $chunk_data['data'] = [];
                 $chunk_data['page'] = 0;
                 $chunk_data['number_of_pages'] = 1;
@@ -278,7 +309,10 @@ function aralco_continue_sync() {
                 $chunk_data['page']++;
                 if($chunk_data['page'] <= $chunk_data['number_of_pages']) {
                     $product_update = Aralco_Connection_Helper::getProducts($chunk_data['last_sync'], $chunk_data['page'], $chunked_amount);
-                    if($product_update instanceof WP_Error) return $product_update;
+                    if($product_update instanceof WP_Error) {
+                        Aralco_WooCommerce_Connector::log_error("Error pre-fetching products", $product_update);
+                        return $product_update;
+                    }
                     $chunk_to_process = $product_update['data'];
                     $chunk_data['number_of_pages'] = $product_update['number_of_pages'];
                     $chunk_data['number_of_records'] = $product_update['number_of_records'];
@@ -308,7 +342,10 @@ function aralco_continue_sync() {
                 break;
             case 'stock_init':
                 $stock = Aralco_Connection_Helper::getProductStock($chunk_data['last_sync']);
-                if($stock instanceof WP_Error) return $stock;
+                if($stock instanceof WP_Error) {
+                    Aralco_WooCommerce_Connector::log_error("Error pre-fetching stock", $stock);
+                    return $stock;
+                }
                 $chunk_data['data'] = $stock;
                 $chunk_data['total'] = count($stock);
                 $chunk_data['progress'] = 0;
@@ -380,6 +417,7 @@ function aralco_continue_sync() {
         $message = "Done!";
         delete_option(ARALCO_SLUG . '_chunking_data');
         update_option(ARALCO_SLUG . '_last_sync', date("Y-m-d\TH:i:s"));
+        Aralco_WooCommerce_Connector::log_info("Completed manual sync");
     } else {
         update_option(ARALCO_SLUG . '_chunking_data', $chunk_data);
     }

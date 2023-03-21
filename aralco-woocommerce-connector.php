@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.25.3
+ * Version: 1.26.0
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 5.3.0
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.25.3
+ * @version 1.26.0
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -38,15 +38,18 @@ require_once 'aralco-shipping-methods.php';
  * Main class in the plugin. All the core logic is contained here.
  */
 class Aralco_WooCommerce_Connector {
+    public static $loggingEnabled = null;
+
     /**
      * Aralco_WooCommerce_Connector constructor.
      */
     public function __construct(){
 
         // register sync hook and deactivation hook
-        add_action( ARALCO_SLUG . '_sync_products', array($this, 'sync_products_quite'));
         add_filter('cron_schedules', array($this, 'custom_cron_timespan'));
-        register_deactivation_hook(__FILE__, array($this, 'unschedule_sync'));
+        add_action( ARALCO_SLUG . '_sync_products', array($this, 'sync_products_quite'));
+        register_activation_hook(__FILE__, array($this, 'plugin_deactivation_hook'));
+        register_deactivation_hook(__FILE__, array($this, 'plugin_deactivation_hook'));
 
         add_action('init', array($this, 'register_globals'));
 
@@ -128,7 +131,7 @@ class Aralco_WooCommerce_Connector {
             add_filter('woocommerce_order_item_quantity_html', array($this, 'order_item_quantity_html'), 100, 2);
             add_filter('woocommerce_email_order_item_quantity', array($this, 'order_item_quantity_html'), 100, 2);
             add_filter('woocommerce_display_item_meta', array($this, 'display_item_meta'), 100, 3);
-            add_filter('woocommerce_email', array($this, 'email'), 100);
+//            add_filter('woocommerce_email', array($this, 'email'), 100);
 
             // register aralco id field display (for admins)
             add_action('woocommerce_product_meta_start', array($this, 'display_aralco_id'), 101, 0);
@@ -184,6 +187,7 @@ class Aralco_WooCommerce_Connector {
                 ARALCO_SLUG
             ))
         );
+        self::log_error('Plugin was loaded while WooCommerce was unavailable!');
     }
 
     /**
@@ -263,6 +267,18 @@ class Aralco_WooCommerce_Connector {
                 'placeholder' => '1a2b3v4d5e6f7g8h9i0j1k2l3m4n5o6p7q8r9s0t',
                 'required' => 'required',
                 'description' => 'Enter the secret barer token for your Aralco Ecommerce API'
+            ]
+        );
+
+        add_settings_field(
+            ARALCO_SLUG . '_field_enable_logging',
+            __('Enable Logging', ARALCO_SLUG),
+            array($this, 'field_checkbox'),
+            ARALCO_SLUG,
+            ARALCO_SLUG . '_global_section',
+            [
+                'label_for' => ARALCO_SLUG . '_field_enable_logging',
+                'required' => 'required'
             ]
         );
 
@@ -654,6 +670,7 @@ class Aralco_WooCommerce_Connector {
             foreach(get_settings_errors() as $index => $message) {
                 if($message['type'] == "error" && strpos($message['setting'], ARALCO_SLUG) !== false) {
                     $has_error = true;
+                    self::log_error(wp_get_current_user()->display_name . ' failed to update plugin settings!', $message);
                 }
             }
             // add settings saved message with the class of "updated"
@@ -664,28 +681,20 @@ class Aralco_WooCommerce_Connector {
                     __('Settings Saved', ARALCO_SLUG),
                     'updated'
                 );
+                self::log_info(wp_get_current_user()->display_name . ' updated plugin settings', null, true);
             }
-        }
-
-        if (isset($_POST['test-connection'])){
+        } else if (isset($_POST['test-connection'])){
+            self::log_info(wp_get_current_user()->display_name . ' used tool Test Connection');
             $this->test_connection();
-        }
-
-        if (isset($_POST['fix-stock-count'])){
+        } else if (isset($_POST['fix-stock-count'])){
+            self::log_info(wp_get_current_user()->display_name . ' used tool Fix Stock Count');
             $this->fix_stock_count();
+        } else if (isset($_POST['remove-old-fields'])){
+            self::log_info(wp_get_current_user()->display_name . ' used tool Remove Old Fields');
+            $this->remove_old_fields();
+        } else {
+            self::log_info(wp_get_current_user()->display_name . ' accessed plugin admin page');
         }
-
-        if (isset($_POST['fix-stamped-taxes'])){
-            $this->fix_stamped_taxes();
-        }
-
-//        if (isset($_POST['sync-now'])){
-//            $this->sync_products();
-//        }
-//
-//        if (isset($_POST['force-sync-now'])){
-//            $this->sync_products(true);
-//        }
 
         // show error/update messages
         require_once 'partials/aralco-admin-settings-display.php';
@@ -759,6 +768,7 @@ class Aralco_WooCommerce_Connector {
                 __('Connection successful.', ARALCO_SLUG),
                 'updated'
             );
+            self::log_info('Connection test successful');
         } else if($result instanceof WP_Error) {
             add_settings_error(
                 ARALCO_SLUG . '_messages',
@@ -766,6 +776,7 @@ class Aralco_WooCommerce_Connector {
                 $result->get_error_message(),
                 'error'
             );
+            self::log_error('Connection test failed!', $result);
         } else {
             // Shouldn't ever get here.
             add_settings_error(
@@ -774,6 +785,7 @@ class Aralco_WooCommerce_Connector {
                 __('Something went wrong. Please contact Aralco.', ARALCO_SLUG) . ' (Code 1)',
                 'error'
             );
+            self::log_error('Connection test failed, but not WP_Error?', $result);
         }
     }
 
@@ -852,33 +864,20 @@ class Aralco_WooCommerce_Connector {
     }
 
     /**
-     * Use to fix all the tax stamps on all the products without syncing everything
+     * Use to remove all legacy entries in wp_options table
      */
-    public function fix_stamped_taxes() {
+    public function remove_old_fields() {
+        global $wpdb;
+        /** @noinspection SqlResolve */
+        $wpdb->query("DELETE FROM {$wpdb->prefix}options WHERE option_name like '" . ARALCO_SLUG . "_last_sync_%'" );
         return;
-//        $aralco_products = Aralco_Connection_Helper::getProducts(date("Y-m-d\TH:i:s", mktime(0, 0, 0, 1, 1, 1900)));
-//        if(is_array($aralco_products)) { // Got Data
-//            foreach ($aralco_products as $item){
-//                $args = array(
-//                    'posts_per_page'    => 1,
-//                    'post_type'         => 'product',
-//                    'meta_key'          => '_aralco_id',
-//                    'meta_value'        => strval($item['ProductID']),
-//                    'post_status'       => array('publish', 'pending', 'draft', 'auto-draft', 'future', 'private', 'inherit', 'trash')
-//                );
-//                $results = (new WP_Query($args))->get_posts();
-//                if (count($results) > 0){
-//                    $post_id = $results[0]->ID;
-//                    update_post_meta($post_id, '_aralco_taxes', $item['Product']['Taxes']);
-//                }
-//            }
-//        }
     }
 
     /**
      * Method called to sync products by WordPress cron. Unlike sync_products, this method provides no feedback and takes no options.
      */
     public function sync_products_quite() {
+        self::log_info('CRON started automatic sync!');
         try{
             $options = get_option(ARALCO_SLUG . '_options');
             if(!isset($options[ARALCO_SLUG . '_field_sync_items'])){
@@ -887,73 +886,21 @@ class Aralco_WooCommerce_Connector {
                 $options = $options[ARALCO_SLUG . '_field_sync_items'];
             }
 
-            if(in_array('departments', $options)) {
-                Aralco_Processing_Helper::sync_departments();
-            } else {
-                update_option(ARALCO_SLUG . '_last_sync_department_count', 0);
-                update_option(ARALCO_SLUG . '_last_sync_duration_departments', 0);
-            }
-
-            if(in_array('groupings', $options)) {
-                Aralco_Processing_Helper::sync_groupings();
-            } else {
-                update_option(ARALCO_SLUG . '_last_sync_grouping_count', 0);
-                update_option(ARALCO_SLUG . '_last_sync_duration_groupings', 0);
-            }
-
-            if(in_array('grids', $options)) {
-                Aralco_Processing_Helper::sync_grids();
-            } else {
-                update_option(ARALCO_SLUG . '_last_sync_grid_count', 0);
-                update_option(ARALCO_SLUG . '_last_sync_duration_grids', 0);
-            }
-
-            if(in_array('suppliers', $options)) {
-                Aralco_Processing_Helper::sync_suppliers();
-            } else {
-                update_option(ARALCO_SLUG . '_last_sync_suppliers_count', 0);
-                update_option(ARALCO_SLUG . '_last_sync_duration_suppliers', 0);
-            }
-
-            if(in_array('products', $options)) {
-                Aralco_Processing_Helper::sync_products();
-            } else {
-                update_option(ARALCO_SLUG . '_last_sync_product_count', 0);
-                update_option(ARALCO_SLUG . '_last_sync_duration_products', 0);
-            }
-
-            if(in_array('stock', $options)) {
-                Aralco_Processing_Helper::sync_stock();
-            } else {
-                update_option(ARALCO_SLUG . '_last_sync_stock_count', 0);
-                update_option(ARALCO_SLUG . '_last_sync_duration_stock', 0);
-            }
-
-            if(in_array('customer_groups', $options)) {
-                Aralco_Processing_Helper::sync_customer_groups();
-            } else {
-                update_option(ARALCO_SLUG . '_last_sync_customer_groups_count', 0);
-                update_option(ARALCO_SLUG . '_last_sync_duration_customer_groups', 0);
-            }
-
-            if(in_array('taxes', $options)) {
-                Aralco_Processing_Helper::sync_taxes();
-            } else {
-                update_option(ARALCO_SLUG . '_last_sync_taxes_count', 0);
-                update_option(ARALCO_SLUG . '_last_sync_duration_taxes', 0);
-            }
-
-            if(in_array('stores', $options)) {
-                Aralco_Processing_Helper::sync_stores();
-            } else {
-                update_option(ARALCO_SLUG . '_last_sync_stores_count', 0);
-                update_option(ARALCO_SLUG . '_last_sync_duration_stores', 0);
-            }
+            if(in_array('departments', $options)) Aralco_Processing_Helper::sync_departments();
+            if(in_array('groupings', $options)) Aralco_Processing_Helper::sync_groupings();
+            if(in_array('grids', $options)) Aralco_Processing_Helper::sync_grids();
+            if(in_array('suppliers', $options)) Aralco_Processing_Helper::sync_suppliers();
+            if(in_array('products', $options)) Aralco_Processing_Helper::sync_products();
+            if(in_array('stock', $options)) Aralco_Processing_Helper::sync_stock();
+            if(in_array('customer_groups', $options)) Aralco_Processing_Helper::sync_customer_groups();
+            if(in_array('taxes', $options)) Aralco_Processing_Helper::sync_taxes();
+            if(in_array('stores', $options)) Aralco_Processing_Helper::sync_stores();
 
             update_option(ARALCO_SLUG . '_last_sync', date("Y-m-d\TH:i:s"));
         } catch (Exception $e) {
-            // Do nothing
+            self::log_error('Uncaught error thrown while performing automatic sync!', $e);
         }
+        self::log_info('CRON finished automatic sync!');
     }
 
     /**
@@ -981,12 +928,28 @@ class Aralco_WooCommerce_Connector {
         $options = get_option(ARALCO_SLUG . '_options');
         if($options !== false && isset($options[ARALCO_SLUG . '_field_sync_enabled']) &&
            $options[ARALCO_SLUG . '_field_sync_enabled'] == '1') { // If sync enabled setting exists and is enabled
-            if (!wp_next_scheduled(ARALCO_SLUG . '_sync_products')){ // If sync is not scheduled
-                wp_schedule_event(time(), ARALCO_SLUG . '_sync_timespan', ARALCO_SLUG . '_sync_products');
+            $schedules = wp_get_schedules();
+            if($schedules[ARALCO_SLUG . '_sync_timespan'] && !wp_next_scheduled(ARALCO_SLUG . '_sync_products')){
+                wp_schedule_event(time() + $schedules[ARALCO_SLUG . '_sync_timespan']['interval'], ARALCO_SLUG . '_sync_timespan', ARALCO_SLUG . '_sync_products');
             }
         } else {
             $this->unschedule_sync();
         }
+    }
+
+    /**
+     * Plugin Activation Hook
+     */
+    public function plugin_activation_hook() {
+        self::log_warning('Plugin activated!', null, true);
+    }
+
+    /**
+     * Plugin Activation Hook
+     */
+    public function plugin_deactivation_hook() {
+        self::log_warning('Plugin deactivated!', null, true);
+        $this->unschedule_sync();
     }
 
     /**
@@ -1027,19 +990,29 @@ class Aralco_WooCommerce_Connector {
             $data = Aralco_Connection_Helper::getCustomer('UserName', $user->user_email);
         }
 
+        if($data) {
+            self::log_info($username . ' logged in. Found saved Aralco ID ' . $data['id']);
+        }
+
         try {
             if (!$data || $data instanceof WP_Error) {
                 // Must be a legacy customer. Create or link it.
                 $this->new_customer($user->ID);
                 $aralco_data = get_user_meta($user->ID, 'aralco_data', true);
                 $data = Aralco_Connection_Helper::getCustomer('Id', $aralco_data['id']);
+                if (isset($data['id'])){
+                    self::log_info($username . ' logged in. Couldn\'t find in aralco so it was created! Aralco ID ' . $data['id']);
+                }
             }
 
             if (!$data || $data instanceof WP_Error) {
                 // if it still doesn't exist, give up
+                self::log_error($username . ' logged in. Couldn\'t find or create a customer in Aralco!', $data);
                 return;
             }
+
         } catch (Exception $e) {
+            self::log_error($username . ' logged in. Unhandled exception was thrown during Aralco ID matching!', $e);
             return;
         }
 
@@ -1051,12 +1024,12 @@ class Aralco_WooCommerce_Connector {
     /**
      * Intermediary call to update customer profile on login
      *
-     * @param $user_login string
+     * @param $username string
      */
     public function trigger_update_customer_info($username) {
         $user = get_user_by('login', $username);
         try {
-            $this->update_customer_info($user->ID);
+            $this->update_customer_info($user);
         } catch (Exception $e) {
             // Do Nothing
         }
@@ -1065,12 +1038,17 @@ class Aralco_WooCommerce_Connector {
     /**
      * Update customer profile in Aralco
      *
-     * @param $customer_id int
+     * @param $user WP_User
      */
-    public function update_customer_info($customer_id) {
-        $aralco_data = get_user_meta($customer_id, "aralco_data", true);
+    public function update_customer_info($user) {
+        $aralco_data = get_user_meta($user->ID, "aralco_data", true);
         if(!!$aralco_data && isset($aralco_data['id'])) {
-            Aralco_Processing_Helper::process_customer_update($customer_id, $aralco_data['id']);
+            $result = Aralco_Processing_Helper::process_customer_update($user->ID, $aralco_data['id']);
+            if($result instanceof WP_Error || $result !== true) {
+                self::log_error($user->user_login . ' updated their profile. Failed to update in Aralco.', $result);
+                return;
+            }
+            self::log_info($user->user_login . ' updated their profile. Update in Aralco.');
         }
     }
 
@@ -1105,8 +1083,12 @@ class Aralco_WooCommerce_Connector {
         $password = wp_generate_password();
 
         $user_id = wc_create_new_customer($_POST['user_login'], $username, $password, $user_data);
-        if ($user_id instanceof WP_Error) return false;
+        if ($user_id instanceof WP_Error) {
+            self::log_error($_POST['user_login'] . ' requested a password reset, but they don\'t exist in WordPress. They do exist in Aralco but something went wrong when importing!', $user_id);
+            return false;
+        }
 
+        self::log_info($_POST['user_login'] . ' requested a password reset, but they don\'t exist in WordPress. They do exist in Aralco through! importing....');
         return WC_Shortcode_My_Account::retrieve_password();
     }
 
@@ -1625,7 +1607,10 @@ $repeated_snippet
 
         if ($result instanceof WP_Error) {
             wc_add_notice($result->get_error_message(), 'error');
+            self::log_error("Attempted to update some product IDs (" . implode(',', $products_to_update) . ") as they are in someone's cart and they are checking out, but something went wrong!", $result);
+            return;
         }
+        self::log_info("Updated stock for product IDs (" . implode(',', $products_to_update) . ") as it's in someone's cart and they are checking out.");
     }
 
     public function update_points() {
@@ -1876,6 +1861,9 @@ $repeated_snippet
         $result = Aralco_Processing_Helper::process_order($order_id);
         if ($result instanceof WP_Error) {
             wc_add_notice(__("Order submission to BOS failed: ", ARALCO_SLUG) . $result->get_error_message(),'error');
+            self::log_error("Order submission to BOS failed for order " . $order_id, $result);
+        } else {
+            self::log_info("Order submitted to BOS (order " . $order_id . ")", $result);
         }
     }
 
@@ -2013,6 +2001,7 @@ $repeated_snippet
                 'has_archives' => true
             ));
             if ($id instanceof WP_Error) return;
+            self::log_info("Aralco Flags taxonomy created");
         }
 
         // Will be true only immediately after the taxonomy was created. Will be false on next page load.
@@ -2031,6 +2020,7 @@ $repeated_snippet
                 delete_term_meta($id, 'order_' . $taxonomy);
                 add_term_meta($id, 'order', $index);
                 add_term_meta($id, 'order_' . $taxonomy, $index);
+                self::log_info("Added " . $value . " to Aralco Flags taxonomy");
             }
         }
     }
@@ -2050,6 +2040,7 @@ $repeated_snippet
                 'order_by' => 'name',
                 'has_archives' => true
             ));
+            self::log_info("Suppliers taxonomy created");
         }
     }
 
@@ -2139,6 +2130,83 @@ $repeated_snippet
     }
 
     /* End of itemized notes hooks */
+
+    /**
+     * Adds an entry to the plugin log
+     *
+     * @param string|array $entry the item to log.
+     * @param null $second_entry used to add extra objects for logging.
+     * @param string $level the log level for the log.
+     * @param bool $override_logging_option weather or not the logging setting should be respected.
+     * @return bool If writing to the log was successful.
+     */
+    private static function add_log($entry, $second_entry = null, $level = "INFO", $override_logging_option = false) {
+        if(Aralco_WooCommerce_Connector::$loggingEnabled == null) {
+            $options = get_option(ARALCO_SLUG . '_options');
+            if($options[ARALCO_SLUG . '_field_enable_logging']){
+                Aralco_WooCommerce_Connector::$loggingEnabled = boolval($options[ARALCO_SLUG . '_field_enable_logging']);
+            } else {
+                Aralco_WooCommerce_Connector::$loggingEnabled = false;
+            }
+        }
+
+        if(!Aralco_WooCommerce_Connector::$loggingEnabled && !$override_logging_option) return false;
+
+        // Get WordPress uploads directory.
+        $upload_dir = wp_upload_dir();
+        $upload_dir = $upload_dir['basedir'];
+        // If the entry is array, json_encode.
+        if (is_array($entry)) {
+            $entry = json_encode($entry);
+        }
+        if ($second_entry instanceof WP_Error) {
+            $second_entry = $second_entry->get_error_code() . ' - ' .
+                $second_entry->get_error_message() . ' - ' .
+                json_encode($second_entry->get_all_error_data());
+        } else if ($second_entry !== null && is_array($second_entry)) {
+            $second_entry = json_encode($second_entry);
+        }
+        // Write the log file.
+        $file = $upload_dir . '/' . ARALCO_SLUG . '.log';
+        $file = fopen($file, 'a');
+        if(!$file) return false; //failed to get a file handle. read only wp-content?
+        try {
+            $time = (new DateTime('now', new DateTimeZone(wp_timezone_string())))->format('Y-m-d H:i:s');
+            $bytes = fwrite($file, '[' . $time . '] [' . $level . ']: ' . $entry . "\n");
+            if($second_entry !== null && is_numeric($bytes)) {
+                $bytes += fwrite($file, '[' . $time . '] [' . $level . ']: ' . $second_entry . "\n");
+            }
+        } catch (Exception $e) {}
+        fclose($file);
+        return (isset($bytes)) ? $bytes > 0 : false;
+    }
+
+    /**
+     * Adds an error entry to the plugin log
+     *
+     * @param string|array $entry the item to log.
+     * @param null|string|array $second_entry additional object to log.
+     * @param false $override_logging_option weather or not the logging setting should be respected.
+     */
+    public static function log_error($entry, $second_entry = null, $override_logging_option = false) { self::add_log($entry, $second_entry, 'ERROR', $override_logging_option); }
+
+    /**
+     * Adds an warning entry to the plugin log
+     *
+     * @param string|array $entry the item to log.
+     * @param null|string|array $second_entry additional object to log.
+     * @param false $override_logging_option weather or not the logging setting should be respected.
+     */
+    public static function log_warning($entry, $second_entry = null, $override_logging_option = false) { self::add_log($entry, $second_entry, 'WARN', $override_logging_option); }
+
+    /**
+     * Adds an info entry to the plugin log
+     *
+     * @param string|array $entry the item to log.
+     * @param null|string|array $second_entry additional object to log.
+     * @param false $override_logging_option weather or not the logging setting should be respected.
+     */
+    public static function log_info($entry, $second_entry = null, $override_logging_option = false) { self::add_log($entry, $second_entry, 'INFO', $override_logging_option); }
 }
 
 require_once 'aralco-widget.php';

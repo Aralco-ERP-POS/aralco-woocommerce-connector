@@ -24,27 +24,32 @@ class Aralco_Processing_Helper {
      * false if no update was due, and a WP_Error instance if something went wrong.
      */
     static function sync_products($everything = false, $products = null) {
+        Aralco_WooCommerce_Connector::log_info("Syncing products");
         $chunked = !is_null($products);
         if ($everything) set_time_limit(0); // Required for the amount of data that needs to be fetched
         else set_time_limit(3600);
         if(!$chunked) {
-            try {
-                $start_time = new DateTime();
-            } catch (Exception $e) {
-            }
             $options = get_option(ARALCO_SLUG . '_options');
             if (!isset($options[ARALCO_SLUG . '_field_api_location']) || !isset($options[ARALCO_SLUG . '_field_api_token'])) {
-                return new WP_Error(
+                $to_return = new WP_Error(
                     ARALCO_SLUG . '_messages',
                     __('You must save the connection settings before you can sync any data.', ARALCO_SLUG)
                 );
+                Aralco_WooCommerce_Connector::log_error("Syncing products failed", $to_return);
+                return $to_return;
             }
 
             $result = Aralco_Processing_Helper::process_shipping_product();
-            if ($result instanceof WP_Error) return $result;
+            if ($result instanceof WP_Error) {
+                Aralco_WooCommerce_Connector::log_error("Process shipping product failed", $result);
+                return $result;
+            }
 
             $result = Aralco_Processing_Helper::process_giftcard_product();
-            if ($result instanceof WP_Error) return $result;
+            if ($result instanceof WP_Error) {
+                Aralco_WooCommerce_Connector::log_error("Process giftcard product failed", $result);
+                return $result;
+            }
 
             $lastSync = get_option(ARALCO_SLUG . '_last_sync');
             if (!isset($lastSync) || $lastSync === false || $everything) {
@@ -53,10 +58,11 @@ class Aralco_Processing_Helper {
 
             $server_time = Aralco_Connection_Helper::getServerTime();
             if ($server_time instanceof WP_Error) {
+                Aralco_WooCommerce_Connector::log_error("Getting server time failed", $server_time);
                 return $server_time;
             } else if (is_array($server_time) && isset($server_time['UtcOffset'])) {
+                $server_time['UtcOffset'] -= 120; // Adds an extra 2 hours to the sync to adjust for server de-syncs
                 $sign = ($server_time['UtcOffset'] > 0)? '+' : '-';
-                $server_time['UtcOffset'] -= 60; // Adds an extra hour to the sync to adjust for server de-syncs
                 if ($server_time['UtcOffset'] < 0) {
                     $server_time['UtcOffset'] = $server_time['UtcOffset'] * -1;
                 }
@@ -66,10 +72,16 @@ class Aralco_Processing_Helper {
             }
 
             $result = Aralco_Processing_Helper::process_disabled_products();
-            if ($result instanceof WP_Error) return $result;
+            if ($result instanceof WP_Error) {
+                Aralco_WooCommerce_Connector::log_error("Processing of disabled products failed", $result);
+                return $result;
+            }
 
             $product_updates = Aralco_Connection_Helper::getProducts($lastSync);
-            if ($product_updates instanceof WP_Error) return $product_updates;
+            if ($product_updates instanceof WP_Error) {
+                Aralco_WooCommerce_Connector::log_error("Get Products failed", $product_updates);
+                return $product_updates;
+            }
             $products = $product_updates['data'];
         } else {
             global $temp_shipping_product_code;
@@ -96,20 +108,11 @@ class Aralco_Processing_Helper {
                 }
             }
 
-            if(!$chunked) {
-                try{
-                    /** @noinspection PhpUndefinedVariableInspection */
-                    $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
-                    update_option(ARALCO_SLUG . '_last_sync_duration_products', $time_taken);
-                } catch(Exception $e) {}
-
-                update_option(ARALCO_SLUG . '_last_sync_product_count', $count);
-            }
-
             if(count($errors) > 0){
                 return $errors;
             }
         }
+        Aralco_WooCommerce_Connector::log_info("Done syncing products");
         return true;
     }
 
@@ -206,6 +209,8 @@ class Aralco_Processing_Helper {
         if(!$is_new){
             // Product already exists
             $post_id = $results[0]->ID;
+            Aralco_WooCommerce_Connector::log_info("Updating Product ID " . $item['ProductID'] . " - " .
+                $item['Product']['Code'] . " - " . $item['Product']['Name']);
         } else {
             // Product is new
             $post_id = wp_insert_post(array(
@@ -215,6 +220,8 @@ class Aralco_Processing_Helper {
                 'post_content'      => $item['Product']['Description'],
                 'post_excerpt'      => $item['Product']['SeoDescription']
             ), true);
+            Aralco_WooCommerce_Connector::log_info("Creating Product ID " . $item['ProductID'] . " - " .
+                $item['Product']['Code'] . " - " . $item['Product']['Name']);
             if($post_id instanceof WP_Error){
                 return $post_id;
             }
@@ -268,6 +275,7 @@ class Aralco_Processing_Helper {
                     wp_update_post($post);
                     $returnVal = $result;
                 } else {
+                    Aralco_WooCommerce_Connector::log_error("Product dimensions error", $result);
                     return $result;
                 }
             } else {
@@ -291,7 +299,9 @@ class Aralco_Processing_Helper {
         if($is_new){
             try{
                 $product->set_catalog_visibility('visible');
-            } catch(Exception $e) {}
+            } catch(Exception $e) {
+                Aralco_WooCommerce_Connector::log_error("Product catalog visibility error", $e);
+            }
             if($options !== false && isset($options[ARALCO_SLUG . '_field_allow_backorders']) && $options[ARALCO_SLUG . '_field_allow_backorders'] == '1'){
                 $product->set_backorders('notify');
                 $product->set_stock_status('onbackorder');
@@ -379,7 +389,9 @@ class Aralco_Processing_Helper {
             wp_set_object_terms($post_id, $terms, wc_attribute_taxonomy_name('aralco-flags'));
             update_post_meta($post_id, '_product_attributes', $product_attributes);
 
-        } catch (Exception $exception) {} //Ignored
+        } catch (Exception $exception) {
+            Aralco_WooCommerce_Connector::log_error("Product advanced attributes soft error", $exception);
+        }
         try {
             global $temp_supplier_mapping;
             if(isset($temp_supplier_mapping)) {
@@ -403,7 +415,9 @@ class Aralco_Processing_Helper {
                 wp_set_object_terms($post_id, $suppliers, wc_attribute_taxonomy_name('suppliers'));
                 update_post_meta($post_id, '_product_attributes', $product_attributes);
             }
-        } catch (Exception $exception) {} //Ignored
+        } catch (Exception $exception) {
+            Aralco_WooCommerce_Connector::log_error("Product supplier soft error", $exception);
+        }
 
         Aralco_Processing_Helper::process_product_grouping($post_id, $item);
         Aralco_Processing_Helper::process_item_images($post_id, $item);
@@ -438,9 +452,11 @@ class Aralco_Processing_Helper {
             wp_set_object_terms($post_id, array($group['Value']), wc_attribute_taxonomy_name('grouping-' . $group_id));
         }
         if(count($invalid_grouping) > 0){
-            return new WP_Error(ARALCO_SLUG . '_dimension_not_enabled',
+            $to_return = new WP_Error(ARALCO_SLUG . '_dimension_not_enabled',
                 $aralco_product['Product']['Code'] .
                 ' - requires the following groups that are not enabled for ecommerce: ' . implode(', ', $invalid_grouping));
+            Aralco_WooCommerce_Connector::log_error("Product grouping error", $terms_temp);
+            return $to_return;
         }
         if(count($product_attributes) > 0){
             update_post_meta($post_id, '_product_attributes', $product_attributes);
@@ -454,10 +470,14 @@ class Aralco_Processing_Helper {
         update_post_meta($post_id,'_product_image_gallery',''); // Removes the product gallery
 
         $images = Aralco_Connection_Helper::getImagesForProduct($item['ProductID'], $item['Product']['HasDimension']);
-        if($images instanceof WP_Error) return;
+        if($images instanceof WP_Error) {
+            Aralco_WooCommerce_Connector::log_error("Product image fetch failed", $images);
+            return;
+        }
         $upload_dir = wp_upload_dir();
 
         foreach($images as $key => $image) {
+            Aralco_WooCommerce_Connector::log_info("Adding Image " . $key);
             $type = '.jpg';
             if (strpos($image->mime_type, 'png') !== false) {
                 $type = '.png';
@@ -739,6 +759,7 @@ class Aralco_Processing_Helper {
      * @return bool|WP_Error true if the inventory sync succeeded, otherwise an instance of WP_Error
      */
     static function sync_stock($products = null, $everything = false, $inventory = null){
+        Aralco_WooCommerce_Connector::log_info("Syncing stock");
         $chunked = !is_null($inventory);
         if(!$chunked) {
             if (is_array($products) && count($products) > 0) {
@@ -750,17 +771,13 @@ class Aralco_Processing_Helper {
                     $lastSync = date("Y-m-d\TH:i:s", mktime(0, 0, 0, 1, 1, 1900));
                 }
 
-                try {
-                    $start_time = new DateTime();
-                } catch (Exception $e) {
-                }
-
                 $server_time = Aralco_Connection_Helper::getServerTime();
                 if ($server_time instanceof WP_Error) {
+                    Aralco_WooCommerce_Connector::log_error("Getting server time failed", $server_time);
                     return $server_time;
                 } else if (is_array($server_time) && isset($server_time['UtcOffset'])) {
+                    $server_time['UtcOffset'] -= 120; // Adds an extra 2 hours to the sync to adjust for server de-syncs
                     $sign = ($server_time['UtcOffset'] > 0)? '+' : '-';
-                    $server_time['UtcOffset'] -= 60; // Adds an extra hour to the sync to adjust for server de-syncs
                     if ($server_time['UtcOffset'] < 0) {
                         $server_time['UtcOffset'] = $server_time['UtcOffset'] * -1;
                     }
@@ -770,7 +787,10 @@ class Aralco_Processing_Helper {
                 }
                 $inventory = Aralco_Connection_Helper::getProductStock($lastSync);
             }
-            if ($inventory instanceof WP_Error) return $inventory;
+            if ($inventory instanceof WP_Error) {
+                Aralco_WooCommerce_Connector::log_error("Getting inventory failed", $inventory);
+                return $inventory;
+            }
         }
 
         $count = 0;
@@ -796,8 +816,12 @@ class Aralco_Processing_Helper {
             );
 
             $results = (new WP_Query($args))->get_posts();
-            if(count($results) <= 0) continue; // Product not found. Abort
+            if(count($results) <= 0) {
+                Aralco_WooCommerce_Connector::log_error("Product ID " . $item['ProductID'] . " not found, skipping!");
+                continue; // Product not found. Abort
+            }
             $product_id = $results[0]->ID;
+            Aralco_WooCommerce_Connector::log_info("Updating stock for " . $results[0]->post_title);
 
             if($item['GridID1'] != 0 || $item['GridID2'] != 0 || $item['GridID3'] != 0 || $item['GridID4'] != 0){
                 $variations = get_posts(array(
@@ -805,7 +829,10 @@ class Aralco_Processing_Helper {
                     'post_type' => 'product_variation',
                     'post_parent' => $product_id,
                 ));
-                if(count($variations) <= 0) continue; // Nothing to do.
+                if(count($variations) <= 0) {
+                    Aralco_WooCommerce_Connector::log_error("Product should have grids, but doesn't? skipping!");
+                    continue; // Nothing to do.
+                }
 
                 $found = false;
                 foreach ($variations as $variation){
@@ -818,11 +845,19 @@ class Aralco_Processing_Helper {
                         (!isset($grids['gridId4']) || (string) $grids['gridId4'] == (string) $item['GridID4'])
                     ){
                         $product_id = $variation->ID;
+                        Aralco_WooCommerce_Connector::log_info("Grid " .
+                            $item['GridID1'] . ":" . $item['GridID2'] . ":" . $item['GridID3'] . ":" . $item['GridID4'] .
+                            ", postId " . $variation->ID);
                         $found = true;
                         break;
                     }
                 }
-                if (!$found) continue; // Nothing to do.
+                if (!$found) {
+                    Aralco_WooCommerce_Connector::log_error("Product ID " . $item['ProductID'] . " grid " .
+                        $item['GridID1'] . ":" . $item['GridID2'] . ":" . $item['GridID3'] . ":" . $item['GridID4'] .
+                        "not found, skipping!");
+                    continue; // Nothing to do.
+                }
             }
 
             if(!empty($item['SerialNumber'])){
@@ -864,19 +899,7 @@ class Aralco_Processing_Helper {
             update_post_meta($product_id, '_stock_status', ($item >= 1) ? 'instock' : $backorder_stock_status);
             $count++;
         }
-
-
-        if(!$chunked) {
-            if(!is_array($products) || count($products) <= 0) {
-                update_option(ARALCO_SLUG . '_last_sync_stock_count', $count);
-
-                try{
-                    /** @noinspection PhpUndefinedVariableInspection */
-                    $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
-                    update_option(ARALCO_SLUG . '_last_sync_duration_stock', $time_taken);
-                } catch(Exception $e) {}
-            }
-        }
+        Aralco_WooCommerce_Connector::log_info("Done syncing inventory");
         return true;
     }
 
@@ -889,20 +912,20 @@ class Aralco_Processing_Helper {
     static function sync_grids($raw_grids = null){
         $chunked = !is_null($raw_grids);
         if(!$chunked) {
-            try {
-                $start_time = new DateTime();
-            } catch (Exception $e) {}
-
+            Aralco_WooCommerce_Connector::log_info("Syncing all grids");
             // Get the grids.
             $raw_grids = Aralco_Connection_Helper::getGrids();
             if($raw_grids instanceof WP_Error || (isset($raw_grids[0]) && !isset($raw_grids[0]['CategoryId']))) {
+                Aralco_WooCommerce_Connector::log_error("Fetching grids failed!", $raw_grids);
                 return $raw_grids; // Something isn't right. Probably API error
             }
+        } else {
+            Aralco_WooCommerce_Connector::log_info("Syncing grids (chunked)");
         }
 
-        if(!isset($raw_grids[0])){
-            return true; // Nothing to do;
-        }
+//        if(!isset($raw_grids[0])){
+//            return true; // Nothing to do;
+//        }
 
         // Clean up the grids so we can loop cleaner
         $grids = array();
@@ -936,6 +959,7 @@ class Aralco_Processing_Helper {
                     'order_by' => 'menu_order',
                     'has_archives' => false
                 ));
+                Aralco_WooCommerce_Connector::log_info("Updating grid " . $grid['CategoryName'] . " slug grid-" . $grid['CategoryId']);
             } else {
                 wc_create_attribute(array(
                     'name' => $grid['CategoryName'],
@@ -944,6 +968,7 @@ class Aralco_Processing_Helper {
                     'order_by' => 'menu_order',
                     'has_archives' => false
                 ));
+                Aralco_WooCommerce_Connector::log_info("Creating grid " . $grid['CategoryName'] . " slug grid-" . $grid['CategoryId']);
             }
             // Part 2: Dealing with the values
             $i2 = 0;
@@ -958,14 +983,17 @@ class Aralco_Processing_Helper {
                     if($result instanceof WP_Error){
 //                        return $result;
                         // Ignore and continue for now. //TODO
+                        Aralco_WooCommerce_Connector::log_error("Grid doesn't seem to exist. This is unfortunately normal and should succeed on the next sync.", $result);
                         continue;
                     }
                     $id = $result['term_id'];
+                    Aralco_WooCommerce_Connector::log_info("Created value " . $value['ValueName'] . " in " . $taxonomy);
                 } else {
                     $id = $existing->term_id;
                     wp_update_term($id, $taxonomy, array(
                         'name' => $value['ValueName'],
                     ));
+                    Aralco_WooCommerce_Connector::log_info("Updated value " . $value['ValueName'] . " in " . $taxonomy);
                 }
                 delete_term_meta($id, 'order');
                 add_term_meta($id, 'order', $i2++);
@@ -977,14 +1005,7 @@ class Aralco_Processing_Helper {
             }
             $i1++;
         }
-
-        if(!$chunked) {
-            try{
-                $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
-                update_option(ARALCO_SLUG . '_last_sync_duration_grids', $time_taken);
-            } catch(Exception $e) {}
-            update_option(ARALCO_SLUG . '_last_sync_grid_count', $i1);
-        }
+        Aralco_WooCommerce_Connector::log_info("Done syncing grids");
         return true;
     }
 
@@ -993,14 +1014,19 @@ class Aralco_Processing_Helper {
      * @return true|WP_Error
      */
     static function sync_departments($departments = null){
+        if (is_array($departments)) {
+            Aralco_WooCommerce_Connector::log_info("Syncing departments: " . implode(',', $departments));
+        } else {
+            Aralco_WooCommerce_Connector::log_info("Syncing all departments");
+        }
         set_time_limit(3600);
         $chunked = !is_null($departments);
         if(!$chunked) {
-            try {
-                $start_time = new DateTime();
-            } catch (Exception $e) {}
             $departments = Aralco_Connection_Helper::getDepartments();
-            if($departments instanceof WP_Error) return $departments;
+            if($departments instanceof WP_Error) {
+                Aralco_WooCommerce_Connector::log_error("Fetching departments failed!", $departments);
+                return $departments;
+            }
         }
 
         $count = 0;
@@ -1019,7 +1045,11 @@ class Aralco_Processing_Helper {
                         'description' => isset($department['Description']) ? $department['Description'] : '',
                         'slug' => $slug
                     ));
-                if ($result instanceof WP_Error) return $result;
+                if ($result instanceof WP_Error) {
+                    Aralco_WooCommerce_Connector::log_error("Failed to add department " . $department['Name'] . " as " . $slug, $result);
+                    return $result;
+                }
+                Aralco_WooCommerce_Connector::log_info("Added department " . $department['Name'] . " as " . $slug);
                 $term_id = $result['term_id'];
             } else {
                 // exists so lets update it
@@ -1031,8 +1061,12 @@ class Aralco_Processing_Helper {
                     $args['parent'] = 0; // to clear parent if parent has been removed
                 }
                 $result = wp_update_term($term->term_id, 'product_cat', $args);
-                if ($result instanceof WP_Error) return $result;
+                if ($result instanceof WP_Error) {
+                    Aralco_WooCommerce_Connector::log_error("Failed to update department " . $department['Name'] . " as " . $slug, $result);
+                    return $result;
+                }
                 $term_id = $term->term_id;
+                Aralco_WooCommerce_Connector::log_info("Updated department " . $department['Name'] . " as " . $slug . " with new metadata");
             }
 
             //update group meta with grouping info
@@ -1048,7 +1082,6 @@ class Aralco_Processing_Helper {
                 $exists = get_term_meta($term_id, 'aralco_filters', true);
                 if($exists != false) delete_term_meta($term_id, 'aralco_filters');
             }
-
             Aralco_Processing_Helper::process_department_images($term_id, $department['Id']);
         }
 
@@ -1069,28 +1102,28 @@ class Aralco_Processing_Helper {
                 'slug' => $child_slug,
                 'parent' => $parent_term->term_id
             ));
-            if ($result instanceof WP_Error) return $result;
+            if ($result instanceof WP_Error) {
+                Aralco_WooCommerce_Connector::log_error("Failed to updated terms relationship for " . $department['Name'] . " as department-" . $department['Id'], $result);
+                return $result;
+            }
+            Aralco_WooCommerce_Connector::log_info("Updated terms relationship for " . $department['Name'] . " as department-" . $department['Id']);
         }
-
-        if(!$chunked) {
-            try {
-                $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
-                update_option(ARALCO_SLUG . '_last_sync_duration_departments', $time_taken);
-            } catch (Exception $e) {}
-            update_option(ARALCO_SLUG . '_last_sync_department_count', $count);
-        }
+        Aralco_WooCommerce_Connector::log_info("Done syncing departments");
         return true;
     }
 
     static function sync_groupings($groupings_raw = null) {
         $chunked = !is_null($groupings_raw);
         if(!$chunked) {
-            try {
-                $start_time = new DateTime();
-            } catch (Exception $e) {}
+            Aralco_WooCommerce_Connector::log_info("Syncing groupings all");
             $groupings_result = Aralco_Connection_Helper::getGroupings();
-            if ($groupings_result instanceof WP_Error) return $groupings_result;
+            if ($groupings_result instanceof WP_Error) {
+                Aralco_WooCommerce_Connector::log_error("Fetching groupings failed!", $groupings_result);
+                return $groupings_result;
+            }
             $groupings_raw = $groupings_result['data'];
+        } else {
+            Aralco_WooCommerce_Connector::log_info("Syncing groupings (chunked)");
         }
 
         $groupings = array();
@@ -1122,6 +1155,7 @@ class Aralco_Processing_Helper {
                     'name' => $grouping['group'],
                     'slug' => $name
                 ));
+                Aralco_WooCommerce_Connector::log_info("Updating grouping " . $grouping['group'] . " slug " . $name);
             } else {
                 $id = wc_create_attribute(array(
                     'name' => $grouping['group'],
@@ -1130,6 +1164,7 @@ class Aralco_Processing_Helper {
                     'order_by' => 'menu_order',
                     'has_archives' => false
                 ));
+                Aralco_WooCommerce_Connector::log_info("Creating grouping " . $grouping['group'] . " slug " . $name);
             }
             if ($id instanceof WP_Error) continue;
 
@@ -1146,15 +1181,18 @@ class Aralco_Processing_Helper {
                     if($result instanceof WP_Error){
 //                        return $result;
                         // Ignore and continue for now. //TODO
+                        Aralco_WooCommerce_Connector::log_error("Grouping doesn't seem to exist. This is unfortunately normal and should succeed on the next sync.", $result);
                         continue;
                     }
                     $id = $result['term_id'];
+                    Aralco_WooCommerce_Connector::log_info("Created value " . $key . " in " . $taxonomy);
                 } else {
                     $id = $existing->term_id;
                     wp_update_term($id, $taxonomy, array(
                         'name' => $key,
                         'description' => $value,
                     ));
+                    Aralco_WooCommerce_Connector::log_info("Updated value " . $key . " in " . $taxonomy);
                 }
                 delete_term_meta($id, 'order');
                 add_term_meta($id, 'order', $i2++);
@@ -1163,22 +1201,12 @@ class Aralco_Processing_Helper {
             }
             $count++;
         }
-
-        if(!$chunked) {
-            try {
-                $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
-                update_option(ARALCO_SLUG . '_last_sync_duration_groupings', $time_taken);
-            } catch (Exception $e) {}
-            update_option(ARALCO_SLUG . '_last_sync_grouping_count', $count);
-        }
+        Aralco_WooCommerce_Connector::log_info("Done syncing grouping");
         return true;
     }
 
     static function sync_suppliers() {
-        try {
-            $start_time = new DateTime();
-        } catch (Exception $e) {}
-
+        Aralco_WooCommerce_Connector::log_info("Syncing suppliers");
         $taxonomy = wc_attribute_taxonomy_name('suppliers');
         $does_exist = taxonomy_exists($taxonomy);
         if($does_exist) {
@@ -1197,15 +1225,17 @@ class Aralco_Processing_Helper {
                     ));
                     if ($result instanceof WP_Error) {
 //                        return $result;
-                        // Ignore and continue for now. //TODO
+                        Aralco_WooCommerce_Connector::log_error("Failed to create supplier " . $supplier['Name'], $result);
                         continue;
                     }
                     $id = $result['term_id'];
+                    Aralco_WooCommerce_Connector::log_info("Created value " . $supplier['Name'] . " in " . $taxonomy);
                 } else {
                     $id = $existing->term_id;
                     wp_update_term($id, $taxonomy, array(
                         'name' => $supplier['Name']
                     ));
+                    Aralco_WooCommerce_Connector::log_info("Updated value " . $supplier['Name'] . " in " . $taxonomy);
                 }
                 delete_term_meta($id, 'order');
                 add_term_meta($id, 'order', $count);
@@ -1217,13 +1247,7 @@ class Aralco_Processing_Helper {
 
             update_option(ARALCO_SLUG . '_supplier_mapping', $supplier_mapping);
         }
-
-        try {
-            $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
-            update_option(ARALCO_SLUG . '_last_sync_duration_suppliers', $time_taken);
-        } catch (Exception $e) {}
-        update_option(ARALCO_SLUG . '_last_sync_suppliers_count', $count);
-
+        Aralco_WooCommerce_Connector::log_info("Done syncing suppliers");
         return true;
     }
 
@@ -1232,10 +1256,12 @@ class Aralco_Processing_Helper {
         if(!empty($existing)){
             wp_delete_attachment($existing, true);
             delete_term_meta($term_id, 'thumbnail_id');
+            Aralco_WooCommerce_Connector::log_info("Deleted department image");
         }
 
         $image = Aralco_Connection_Helper::getImageForDepartment($department_id);
         if(!$image instanceof Aralco_Image){
+            Aralco_WooCommerce_Connector::log_info("No department image to add");
             return; // Nothing to do.
         }
         $upload_dir = wp_upload_dir();
@@ -1278,6 +1304,7 @@ class Aralco_Processing_Helper {
         wp_update_attachment_metadata( $attach_id, $attach_data );
         // asign to feature image
         update_term_meta($term_id,'thumbnail_id', $attach_id);
+        Aralco_WooCommerce_Connector::log_info("Added department image");
     }
 
     /**
@@ -1346,32 +1373,25 @@ class Aralco_Processing_Helper {
      * @return true|WP_Error True if groupings were updated, or WP_Error if a problem occurred.
      */
     static function sync_customer_groups() {
-        try{
-            $start_time = new DateTime();
-        } catch(Exception $e) {}
-
+        Aralco_WooCommerce_Connector::log_info("Syncing customer groups");
         $groups = Aralco_Connection_Helper::getCustomerGroups();
-        if ($groups instanceof WP_Error) return $groups;
+        if ($groups instanceof WP_Error) {
+            Aralco_WooCommerce_Connector::log_info("Getting customer groups failed", $groups);
+            return $groups;
+        }
 
         update_option(ARALCO_SLUG . '_customer_groups', $groups, true);
-        update_option(ARALCO_SLUG . '_last_sync_customer_groups_count', count($groups));
-
-        try{
-            /** @noinspection PhpUndefinedVariableInspection */
-            $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
-            update_option(ARALCO_SLUG . '_last_sync_duration_customer_groups', $time_taken);
-        } catch(Exception $e) {}
-
+        Aralco_WooCommerce_Connector::log_info("Done syncing customer groups");
         return true;
     }
 
     static function sync_taxes() {
-        try{
-            $start_time = new DateTime();
-        } catch(Exception $e) {}
-
+        Aralco_WooCommerce_Connector::log_info("Syncing taxes");
         $taxes = Aralco_Connection_Helper::getTaxes();
-        if ($taxes instanceof WP_Error) return $taxes;
+        if ($taxes instanceof WP_Error) {
+            Aralco_WooCommerce_Connector::log_error("Error getting taxes", $taxes);
+            return $taxes;
+        }
 
         $shipping_code = get_option(ARALCO_SLUG . '_shipping_product_code');
         if($shipping_code !== false) {
@@ -1386,6 +1406,7 @@ class Aralco_Processing_Helper {
         $tax_mapping = array();
         $orderCounter = 0;
         foreach ($taxes as $tax){
+            Aralco_WooCommerce_Connector::log_info("Doing tax " . $tax['name']);
             // '%d', '%f', '%s' (integer, float, string).
             $tax_mapping[$tax['id']] = array();
             $provinces = explode(',', isset($tax['provinceState']) ? $tax['provinceState'] : '');
@@ -1456,14 +1477,7 @@ class Aralco_Processing_Helper {
         }
 
         update_option(ARALCO_SLUG . '_tax_mapping', $tax_mapping);
-        update_option(ARALCO_SLUG . '_last_sync_taxes_count', count($tax_mapping));
-
-        try{
-            /** @noinspection PhpUndefinedVariableInspection */
-            $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
-            update_option(ARALCO_SLUG . '_last_sync_duration_taxes', $time_taken);
-        } catch(Exception $e) {}
-
+        Aralco_WooCommerce_Connector::log_info("Done syncing taxes");
         return true;
     }
 
@@ -1473,22 +1487,15 @@ class Aralco_Processing_Helper {
      * @return true|WP_Error True if the stores were updated, or WP_Error if a problem occurred.
      */
     static function sync_stores() {
-        try{
-            $start_time = new DateTime();
-        } catch(Exception $e) {}
-
+        Aralco_WooCommerce_Connector::log_info("Syncing stores");
         $stores = Aralco_Connection_Helper::getStores();
-        if ($stores instanceof WP_Error) return $stores;
+        if ($stores instanceof WP_Error) {
+            Aralco_WooCommerce_Connector::log_error("Getting stores failed", $stores);
+            return $stores;
+        }
 
         update_option(ARALCO_SLUG . '_stores', $stores, true);
-        update_option(ARALCO_SLUG . '_last_sync_stores_count', count($stores));
-
-        try{
-            /** @noinspection PhpUndefinedVariableInspection */
-            $time_taken = (new DateTime())->getTimestamp() - $start_time->getTimestamp();
-            update_option(ARALCO_SLUG . '_last_sync_duration_stores', $time_taken);
-        } catch(Exception $e) {}
-
+        Aralco_WooCommerce_Connector::log_info("Done syncing stores");
         return true;
     }
 

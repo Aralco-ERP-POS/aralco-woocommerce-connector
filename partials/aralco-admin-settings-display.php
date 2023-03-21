@@ -264,98 +264,38 @@ require_once(ABSPATH.'wp-admin/includes/plugin.php');
             <?php submit_button('Fix Stock'); ?>
         </form>
         <form action="admin.php?page=aralco_woocommerce_connector_settings" method="post" class="form-requires-load-blur">
-            <h2>Fix Product Taxes (DEBUG)</h2>
-            <p>Used to update all products with stamped taxes. Debug tool. May be removed in the future.</p>
-            <input type="hidden" name="fix-stamped-taxes" value="1">
-            <?php submit_button('Fix Taxes'); ?>
+            <h2>Remove Old Fields (DEBUG)</h2>
+            <p>Cleans up old options no longer used by this plugin. Debug tool. May be removed in the future.</p>
+            <input type="hidden" name="remove-old-fields" value="1">
+            <?php submit_button('Remove Old Fields'); ?>
         </form>
     </div>
     <div>
         <p style="color: #ff0000; text-align: center">If you get a critical error while syncing, you may need to adjust the server's php timeout or memory limit. Contact Aralco if you need assistance with that.</p>
         <!--<h3 class="last-run-stats-title">Last Run Stats</h3>-->
         <div class="last-run-stats">
-            <span title="Last Sync Completion Date">
+            <span title="Last Sync">
                 <span class="dashicons dashicons-plugins-checked" aria-hidden="true"></span>
-                <span class="screen-reader-text">Last Sync Completion Date:</span>
+                <span class="screen-reader-text">Last Sync</span>
                 <?php
                     $last_sync = get_option(ARALCO_SLUG . '_last_sync');
-                    $total_records = 0;
-                    $total_run_tiume = 0;
-                    echo $last_sync !== false ? $last_sync . ' UTC' : '(never run)'
+                    if($last_sync !== false) {
+                        $dt = new DateTime($last_sync, new DateTimeZone('UTC'));
+                        $dt->setTimezone(new DateTimeZone(wp_timezone_string()));
+                        echo $dt->format("Y-m-d\TH:i:s");
+                    } else echo '(never run)';
                     ?>
-            </span> <!--<span title="Departments">
-                <span class="dashicons dashicons-building" aria-hidden="true"></span>
-                <span class="screen-reader-text">Departments:</span>
-                <?php
-                    $time_taken = get_option(ARALCO_SLUG . '_last_sync_duration_departments');
-                    $count = get_option(ARALCO_SLUG . '_last_sync_department_count');
-                    if ($time_taken > 0) $total_run_tiume += $time_taken;
-                    if ($count > 0) $total_records += $count;
-                    echo ($count !== false ? $count : '0') . ' (' .
-                        ($time_taken !== false ? $time_taken : '0') . 's)'
-                    ?>
-            </span> <span title="Grids">
-                <span class="dashicons dashicons-grid-view" aria-hidden="true"></span>
-                <span class="screen-reader-text">Grids:</span>
-                <?php
-                    $time_taken = get_option(ARALCO_SLUG . '_last_sync_duration_grids');
-                    $count = get_option(ARALCO_SLUG . '_last_sync_grid_count');
-                    if ($time_taken > 0) $total_run_tiume += $time_taken;
-                    if ($count > 0) $total_records += $count;
-                    echo ($count !== false ? $count : '0') . ' (' .
-                        ($time_taken !== false ? $time_taken : '0') . 's)'
-                ?>
-            </span> <span title="Groupings">
-                <span class="dashicons dashicons-index-card" aria-hidden="true"></span>
-                <span class="screen-reader-text">Groupings:</span>
-                <?php
-                    $time_taken = get_option(ARALCO_SLUG . '_last_sync_duration_groupings');
-                    $count = get_option(ARALCO_SLUG . '_last_sync_grouping_count');
-                    if ($time_taken > 0) $total_run_tiume += $time_taken;
-                    if ($count > 0) $total_records += $count;
-                    echo ($count !== false ? $count : '0') . ' (' .
-                        ($time_taken !== false ? $time_taken : '0') . 's)'
-                    ?>
-            </span> <span title="Products">
-                <span class="dashicons dashicons-cart" aria-hidden="true"></span>
-                <span class="screen-reader-text">Products:</span>
-                <?php
-                    $time_taken = get_option(ARALCO_SLUG . '_last_sync_duration_products');
-                    $count = get_option(ARALCO_SLUG . '_last_sync_product_count');
-                    if ($time_taken > 0) $total_run_tiume += $time_taken;
-                    if ($count > 0) $total_records += $count;
-                    echo ($count !== false ? $count : '0') . ' (' .
-                        ($time_taken !== false ? $time_taken : '0') . 's)'
-                    ?>
-            </span> <span title="Stock">
-                <span class="dashicons dashicons-archive" aria-hidden="true"></span>
-                <span class="screen-reader-text">Stock:</span>
-                <?php
-                    $time_taken = get_option(ARALCO_SLUG . '_last_sync_duration_stock');
-                    $count = get_option(ARALCO_SLUG . '_last_sync_stock_count');
-                    if ($time_taken > 0) $total_run_tiume += $time_taken;
-                    if ($count > 0) $total_records += $count;
-                    echo ($count !== false ? $count : '0') . ' (' .
-                        ($time_taken !== false ? $time_taken : '0') . 's)'
-                    ?>
-            </span> <span title="Customer Groups">
-                <span class="dashicons dashicons-admin-users" aria-hidden="true"></span>
-                <span class="screen-reader-text">Customer Groups:</span>
-                <?php
-                    $time_taken = get_option(ARALCO_SLUG . '_last_sync_duration_customer_groups');
-                    $count = get_option(ARALCO_SLUG . '_last_sync_customer_groups_count');
-                    if ($time_taken > 0) $total_run_tiume += $time_taken;
-                    if ($count > 0) $total_records += $count;
-                    echo ($count !== false ? $count : '0') . ' (' .
-                        ($time_taken !== false ? $time_taken : '0') . 's)'
-                    ?>
-            </span> <span title="Total Entries Updated">
-                <span class="dashicons dashicons-admin-site-alt3" aria-hidden="true"></span>
-                <span class="screen-reader-text">Total Entries Updated:</span>
-                <?php
-                    echo $total_records . ' (' . $total_run_tiume . 's)'
-                    ?>
-            </span>-->
+            </span>
+            <span title="Server Time">
+                <span class="dashicons dashicons-clock" aria-hidden="true"></span>
+                <span class="screen-reader-text">Server Time</span>
+                <?php echo (new DateTime("now", new DateTimeZone(wp_timezone_string())))->format("Y-m-d\TH:i:s"); ?>
+            </span>
+            <span title="Timezone">
+                <span class="dashicons dashicons-admin-site" aria-hidden="true"></span>
+                <span class="screen-reader-text">Timezone</span>
+                <?php echo wp_timezone_string(); ?>
+            </span>
         </div>
     </div>
     <hr>

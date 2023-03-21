@@ -179,6 +179,9 @@ function aralco_validate_config($input) {
 //        fclose($file);
 //    } catch (Exception $e) {/* Do Nothing */}
 
+    $input[ARALCO_SLUG . '_field_field_enable_logging'] = (isset($input[ARALCO_SLUG . '_field_field_enable_logging']) &&
+        $input[ARALCO_SLUG . '_field_enable_logging'] == 1) ? '1' : '0';
+
     $input[ARALCO_SLUG . '_field_allow_backorders'] = (isset($input[ARALCO_SLUG . '_field_allow_backorders']) &&
         $input[ARALCO_SLUG . '_field_allow_backorders'] == 1) ? '1' : '0';
 
