@@ -72,6 +72,7 @@ class Aralco_Connection_Helper {
         curl_setopt($curl, CURLOPT_POSTFIELDS, "{}"); // Set Body
         $data = curl_exec($curl); // Get cURL result body
         $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        $data = (!$data) ? curl_error($curl) : $data;
         curl_close($curl); // Close the cURL handler
 
         $baseInfo['CustomData'] = array();
@@ -121,6 +122,7 @@ class Aralco_Connection_Helper {
         )); // Basic Auth
         $data = curl_exec($curl); // Get cURL result body
         $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        $data = (!$data) ? curl_error($curl) : $data;
         curl_close($curl); // Close the cURL handler
 
         if($http_code == 200){
@@ -142,7 +144,8 @@ class Aralco_Connection_Helper {
 
         return new WP_Error(
             ARALCO_SLUG . '_get_setting_error',
-            __('Settings Fetch Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG)
+            __('Settings Fetch Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG),
+            ['property' => $property, 'category' => $category]
         );
     }
 
@@ -167,6 +170,7 @@ class Aralco_Connection_Helper {
         )); // Basic Auth
         $data = curl_exec($curl); // Get cURL result body
         $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        $data = (!$data) ? curl_error($curl) : $data;
         curl_close($curl); // Close the cURL handler
 
         if($http_code == 200){
@@ -213,6 +217,7 @@ class Aralco_Connection_Helper {
         )); // Basic Auth
         $data = curl_exec($curl); // Get cURL result body
         $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        $data = (!$data) ? curl_error($curl) : $data;
         curl_close($curl); // Close the cURL handler
 
         if($http_code == 200){
@@ -234,7 +239,8 @@ class Aralco_Connection_Helper {
 
         return new WP_Error(
             ARALCO_SLUG . '_get_setting_error',
-            __('GiftCard Balance Fetch Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG)
+            __('GiftCard Balance Fetch Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG),
+            ['code' => $code]
         );
     }
 
@@ -265,7 +271,7 @@ class Aralco_Connection_Helper {
         $headerSize = curl_getinfo($curl, CURLINFO_HEADER_SIZE);
         $headers = Aralco_Connection_Helper::headersToArray(substr($result, 0, $headerSize));
         $data = substr($result, $headerSize);
-
+        $data = (empty($data)) ? curl_error($curl) : $data;
         curl_close($curl); // Close the cURL handler
 
         if($http_code == 200){
@@ -291,7 +297,8 @@ class Aralco_Connection_Helper {
 
         return new WP_Error(
             ARALCO_SLUG . '_get_product_error',
-            __('Product Fetch Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG)
+            __('Product Fetch Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG),
+            ['start_time' => $start_time, 'page' => $page, 'per_page' => $per_page]
         );
     }
 
@@ -316,6 +323,7 @@ class Aralco_Connection_Helper {
         )); // Basic Auth
         $data = curl_exec($curl); // Get cURL result body
         $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        $data = (!$data) ? curl_error($curl) : $data;
         curl_close($curl); // Close the cURL handler
 
         if($http_code == 200){
@@ -337,7 +345,7 @@ class Aralco_Connection_Helper {
 
         return new WP_Error(
             ARALCO_SLUG . '_get_disabled_product_error',
-            __('Product Fetch 2 Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG)
+            __('Disabled Product Fetch Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG)
         );
     }
 
@@ -363,6 +371,7 @@ class Aralco_Connection_Helper {
         )); // Basic Auth
         $data = curl_exec($curl); // Get cURL result body
         $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        $data = (!$data) ? curl_error($curl) : $data;
         curl_close($curl); // Close the cURL handler
 
         if($http_code == 200){
@@ -384,7 +393,8 @@ class Aralco_Connection_Helper {
 
         return new WP_Error(
             ARALCO_SLUG . '_get_product_barcodes_error',
-            __('Product Barcodes Fetch Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG)
+            __('Product Barcodes Fetch Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG),
+            ['productId' => $productId]
         );
     }
 
@@ -433,6 +443,7 @@ class Aralco_Connection_Helper {
                 $data = curl_exec($curl); // Get cURL result body
                 $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
                 $mime_type = curl_getinfo($curl, CURLINFO_CONTENT_TYPE); // Get image type
+                $data = (!$data) ? curl_error($curl) : $data;
                 curl_close($curl); // Close the cURL handler
 
                 if($http_code == 200){
@@ -444,6 +455,14 @@ class Aralco_Connection_Helper {
                     ));
                     if($key == 0) break;
                 } else {
+                    if($http_code >= 400 || $http_code == 0){
+                        $error = new WP_Error(
+                            ARALCO_SLUG . '_get_product_images_error',
+                            __('Product Image Fetch Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . $data,
+                            ['product_id' => $product_id, 'has_grids' => $has_grids, 'key' => $key, 'item' => $item, 'i' => $i]
+                        );
+                        Aralco_WooCommerce_Connector::log_error('Error Fetching image.', $error);
+                    }
                     break;
                 }
             }
@@ -475,6 +494,7 @@ class Aralco_Connection_Helper {
         )); // Basic Auth
         $data = curl_exec($curl); // Get cURL result body
         $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        $data = (!$data) ? curl_error($curl) : $data;
         curl_close($curl); // Close the cURL handler
 
         if($http_code == 200){
@@ -496,7 +516,8 @@ class Aralco_Connection_Helper {
 
         return new WP_Error(
             ARALCO_SLUG . '_get_inventory_error',
-            __('Inventory Fetch Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG)
+            __('Inventory Fetch Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG),
+            ['start_time' => $start_time, 'to_time' => $to_time]
         );
     }
 
@@ -524,6 +545,7 @@ class Aralco_Connection_Helper {
         curl_setopt($curl, CURLOPT_POSTFIELDS, json_encode($products)); // Set Body
         $data = curl_exec($curl); // Get cURL result body
         $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        $data = (!$data) ? curl_error($curl) : $data;
         curl_close($curl); // Close the cURL handler
 
         if($http_code == 200){
@@ -545,7 +567,8 @@ class Aralco_Connection_Helper {
 
         return new WP_Error(
             ARALCO_SLUG . '_get_targeted_inventory_error',
-            __('Targeted Inventory Fetch Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG)
+            __('Targeted Inventory Fetch Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG),
+            $products
         );
     }
 
@@ -572,7 +595,7 @@ class Aralco_Connection_Helper {
         $headerSize = curl_getinfo($curl, CURLINFO_HEADER_SIZE);
         $headers = Aralco_Connection_Helper::headersToArray(substr($result, 0, $headerSize));
         $data = substr($result, $headerSize);
-
+        $data = (empty($data)) ? curl_error($curl) : $data;
         curl_close($curl); // Close the cURL handler
 
         if($http_code == 200){
@@ -598,7 +621,8 @@ class Aralco_Connection_Helper {
 
         return new WP_Error(
             ARALCO_SLUG . '_get_groupings_error',
-            __('Groupings Fetch Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG)
+            __('Groupings Fetch Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG),
+            ['get_count' => $get_count, 'page' => $page, 'per_page' => $per_page]
         );
     }
 
@@ -620,6 +644,7 @@ class Aralco_Connection_Helper {
         )); // Basic Auth
         $data = curl_exec($curl); // Get cURL result body
         $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        $data = (!$data) ? curl_error($curl) : $data;
         curl_close($curl); // Close the cURL handler
 
         if($http_code == 200){
@@ -663,6 +688,7 @@ class Aralco_Connection_Helper {
         )); // Basic Auth
         $data = curl_exec($curl); // Get cURL result body
         $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        $data = (!$data) ? curl_error($curl) : $data;
         curl_close($curl); // Close the cURL handler
 
         if($http_code == 200){
@@ -706,6 +732,7 @@ class Aralco_Connection_Helper {
         )); // Basic Auth
         $data = curl_exec($curl); // Get cURL result body
         $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        $data = (!$data) ? curl_error($curl) : $data;
         curl_close($curl); // Close the cURL handler
 
         if($http_code == 200){
@@ -751,12 +778,21 @@ class Aralco_Connection_Helper {
         $data = curl_exec($curl); // Get cURL result body
         $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
         $mime_type = curl_getinfo($curl, CURLINFO_CONTENT_TYPE); // Get image type
+        $data = (!$data) ? curl_error($curl) : $data;
         curl_close($curl); // Close the cURL handler
 
         if($http_code == 200){
             return new Aralco_Image($data, $mime_type);
         }
 
+        if($http_code >= 400 || $http_code == 0){
+            $error = new WP_Error(
+                ARALCO_SLUG . '_get_product_images_error',
+                __('Department Image Fetch Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . $data,
+                ['product_id' => $product_id]
+            );
+            Aralco_WooCommerce_Connector::log_error('Error Fetching department image.', $error);
+        }
         return null;
     }
 
@@ -777,6 +813,7 @@ class Aralco_Connection_Helper {
         )); // Basic Auth
         $data = curl_exec($curl); // Get cURL result body
         $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        $data = (!$data) ? curl_error($curl) : $data;
         curl_close($curl); // Close the cURL handler
 
         if($http_code == 200){
@@ -819,6 +856,7 @@ class Aralco_Connection_Helper {
         )); // Basic Auth
         $data = curl_exec($curl); // Get cURL result body
         $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        $data = (!$data) ? curl_error($curl) : $data;
         curl_close($curl); // Close the cURL handler
 
         if($http_code == 200){
@@ -861,6 +899,7 @@ class Aralco_Connection_Helper {
         )); // Basic Auth
         $data = curl_exec($curl); // Get cURL result body
         $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        $data = (!$data) ? curl_error($curl) : $data;
         curl_close($curl); // Close the cURL handler
 
         if($http_code == 200){
@@ -906,6 +945,7 @@ class Aralco_Connection_Helper {
         )); // Basic Auth
         $data = curl_exec($curl); // Get cURL result body
         $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        $data = (!$data) ? curl_error($curl) : $data;
         curl_close($curl); // Close the cURL handler
 
         if($http_code == 200){
@@ -954,6 +994,7 @@ class Aralco_Connection_Helper {
         )); // Basic Auth
         $data = curl_exec($curl); // Get cURL result body
         $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        $data = (!$data) ? curl_error($curl) : $data;
         curl_close($curl); // Close the cURL handler
 
         if($http_code == 200){
@@ -978,7 +1019,8 @@ class Aralco_Connection_Helper {
 
         return new WP_Error(
             ARALCO_SLUG . '_get_customer_error',
-            __('Customer Fetch Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG)
+            __('Customer Fetch Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG),
+            ['column' => $column, 'value' => $value]
         );
     }
 
@@ -1001,6 +1043,7 @@ class Aralco_Connection_Helper {
         )); // Basic Auth
         $data = curl_exec($curl); // Get cURL result body
         $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        $data = (!$data) ? curl_error($curl) : $data;
         curl_close($curl); // Close the cURL handler
 
         if($http_code == 200){
@@ -1025,7 +1068,8 @@ class Aralco_Connection_Helper {
 
         return new WP_Error(
             ARALCO_SLUG . '_get_invoices_error',
-            __('Invoice List Fetch Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG)
+            __('Invoice List Fetch Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG),
+            ['customerId' => $customerId]
         );
     }
 
@@ -1053,6 +1097,7 @@ class Aralco_Connection_Helper {
         curl_setopt($curl, CURLOPT_POSTFIELDS, json_encode($customer)); // Set Body
         $data = curl_exec($curl); // Get cURL result body
         $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        $data = (!$data) ? curl_error($curl) : $data;
         curl_close($curl); // Close the cURL handler
 
         $baseInfo['CustomData'] = array();
@@ -1075,7 +1120,8 @@ class Aralco_Connection_Helper {
 
         return new WP_Error(
             ARALCO_SLUG . '_connection_failed',
-            __('Customer Creation Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG)
+            __('Customer Creation Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG),
+            $customer
         );
     }
 
@@ -1103,6 +1149,7 @@ class Aralco_Connection_Helper {
         curl_setopt($curl, CURLOPT_POSTFIELDS, json_encode($customer)); // Set Body
         $data = curl_exec($curl); // Get cURL result body
         $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        $data = (!$data) ? curl_error($curl) : $data;
         curl_close($curl); // Close the cURL handler
 
         $baseInfo['CustomData'] = array();
@@ -1125,7 +1172,8 @@ class Aralco_Connection_Helper {
 
         return new WP_Error(
             ARALCO_SLUG . '_connection_failed',
-            __('Customer Update Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG)
+            __('Customer Update Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG),
+            $customer
         );
     }
 
@@ -1153,6 +1201,7 @@ class Aralco_Connection_Helper {
         curl_setopt($curl, CURLOPT_POSTFIELDS, json_encode($order)); // Set Body
         $data = curl_exec($curl); // Get cURL result body
         $http_code = curl_getinfo($curl, CURLINFO_HTTP_CODE); // Get status code
+        $data = (!$data) ? curl_error($curl) : $data;
         curl_close($curl); // Close the cURL handler
 
         $baseInfo['CustomData'] = array();
@@ -1175,7 +1224,8 @@ class Aralco_Connection_Helper {
 
         return new WP_Error(
             ARALCO_SLUG . '_order_failed',
-            __('Order Creation Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG)
+            __('Order Creation Failed', ARALCO_SLUG) . ' (' . $http_code . '): ' . __($message, ARALCO_SLUG),
+            $order
         );
     }
 

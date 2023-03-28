@@ -61,7 +61,7 @@ class Aralco_Processing_Helper {
                 Aralco_WooCommerce_Connector::log_error("Getting server time failed", $server_time);
                 return $server_time;
             } else if (is_array($server_time) && isset($server_time['UtcOffset'])) {
-                $server_time['UtcOffset'] -= 120; // Adds an extra 2 hours to the sync to adjust for server de-syncs
+                $server_time['UtcOffset'] -= 60; // Adds an extra hour to the sync to adjust for server de-syncs
                 $sign = ($server_time['UtcOffset'] > 0)? '+' : '-';
                 if ($server_time['UtcOffset'] < 0) {
                     $server_time['UtcOffset'] = $server_time['UtcOffset'] * -1;
@@ -776,7 +776,7 @@ class Aralco_Processing_Helper {
                     Aralco_WooCommerce_Connector::log_error("Getting server time failed", $server_time);
                     return $server_time;
                 } else if (is_array($server_time) && isset($server_time['UtcOffset'])) {
-                    $server_time['UtcOffset'] -= 120; // Adds an extra 2 hours to the sync to adjust for server de-syncs
+                    $server_time['UtcOffset'] -= 60; // Adds an extra hour to the sync to adjust for server de-syncs
                     $sign = ($server_time['UtcOffset'] > 0)? '+' : '-';
                     if ($server_time['UtcOffset'] < 0) {
                         $server_time['UtcOffset'] = $server_time['UtcOffset'] * -1;
@@ -1543,8 +1543,43 @@ class Aralco_Processing_Helper {
         $aralco_user = array();
         if($order->get_user()){ // If not a guest
             $temp = get_user_meta($order->get_user()->ID, 'aralco_data', true); // Get aralco data
-            if ($temp && !empty($temp)) { // If got aralco data
+            if ($temp) { // If got aralco data
                 $aralco_user = $temp; // Set it
+            }
+        } else {
+            $email = $order->get_billing_email();
+            $aralco_user = Aralco_Connection_Helper::getCustomer('UserName', $email);
+            if(!$aralco_user || $aralco_user instanceof WP_Error){
+                $customer = array(
+                    'Username'        => $email,
+                    'Password'        => 'AralcoWeb', // Required but not used
+                    'Address1'        => $order->get_billing_address_1() ?? 'Unknown',
+                    'Address2'        => $order->get_billing_address_2() ?? '',
+                    'City'            => $order->get_billing_city() ?? '',
+                    'Companyname'     => $order->get_billing_company() ?? '',
+                    'Country'         => $order->get_billing_country() ?? 'Unknown',
+                    'Name'            => $order->get_billing_first_name() ?? 'Unknown',
+                    'Surname'         => $order->get_billing_last_name() ?? 'Unknown',
+                    'Phone'           => $order->get_billing_phone() ?? '',
+                    'ProvinceState'   => $order->get_billing_state() ?? 'Unknown',
+                    'ZipPostalCode'   => $order->get_billing_postcode() ?? '',
+                );
+                $create_user_result = Aralco_Connection_Helper::createCustomer($customer);
+                if($create_user_result instanceof WP_Error){
+                    Aralco_WooCommerce_Connector::log_error('Failed to create user for order ' . $order->get_id(), $create_user_result);
+                    return new WP_Error(
+                        ARALCO_SLUG . '_message',
+                        __('Was unable to create or find a user with the email: ' . $email, ARALCO_SLUG)
+                    );
+                }
+                $aralco_user = Aralco_Connection_Helper::getCustomer('UserName', $email);
+                if(!$aralco_user || $aralco_user instanceof WP_Error){
+                    Aralco_WooCommerce_Connector::log_error('Failed to find newly created user for order ' . $order->get_id(), $aralco_user);
+                    return new WP_Error(
+                        ARALCO_SLUG . '_message',
+                        __('Created a new user with the email ' . $email . ' but could not find them afterwards?', ARALCO_SLUG)
+                    );
+                }
             }
         }
 
@@ -1619,7 +1654,7 @@ class Aralco_Processing_Helper {
         }
 
         $aralco_order = array(
-            'username'   => (isset($aralco_user['email'])) ? $aralco_user['email'] : $options[ARALCO_SLUG . '_field_default_order_email'],
+            'username'   => $aralco_user['email'], //(isset($aralco_user['email'])) ? $aralco_user['email'] : $options[ARALCO_SLUG . '_field_default_order_email'],
             'storeId'    => $options[ARALCO_SLUG . '_field_store_id'],
             'items'      => array(),
             'weborderid' => $order_id,

@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.26.0
+ * Version: 1.26.1
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 5.3.0
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.26.0
+ * @version 1.26.1
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -512,21 +512,21 @@ class Aralco_WooCommerce_Connector {
             ]
         );
 
-        add_settings_field(
-            ARALCO_SLUG . '_field_default_order_email',
-            __('Default Order Email', ARALCO_SLUG),
-            array($this, 'field_input'),
-            ARALCO_SLUG,
-            ARALCO_SLUG . '_order_section',
-            [
-                'type' => 'text',
-                'label_for' => ARALCO_SLUG . '_field_default_order_email',
-                'class' => ARALCO_SLUG . '_row',
-                'placeholder' => 'john@example.com',
-                'required' => 'required',
-                'description' => 'Required for guest checkout. Please provide an email that is attached to a valid customer profile in Aralco. Not providing one will result in an error if a guest checks out.'
-            ]
-        );
+//        add_settings_field(
+//            ARALCO_SLUG . '_field_default_order_email',
+//            __('Default Order Email', ARALCO_SLUG),
+//            array($this, 'field_input'),
+//            ARALCO_SLUG,
+//            ARALCO_SLUG . '_order_section',
+//            [
+//                'type' => 'text',
+//                'label_for' => ARALCO_SLUG . '_field_default_order_email',
+//                'class' => ARALCO_SLUG . '_row',
+//                'placeholder' => 'john@example.com',
+//                'required' => 'required',
+//                'description' => 'Required for guest checkout. Please provide an email that is attached to a valid customer profile in Aralco. Not providing one will result in an error if a guest checks out.'
+//            ]
+//        );
 
         add_settings_field(
             ARALCO_SLUG . '_field_store_id',
@@ -1607,10 +1607,10 @@ $repeated_snippet
 
         if ($result instanceof WP_Error) {
             wc_add_notice($result->get_error_message(), 'error');
-            self::log_error("Attempted to update some product IDs (" . implode(',', $products_to_update) . ") as they are in someone's cart and they are checking out, but something went wrong!", $result);
+            self::log_error("Attempted to update some product as they are in someone's cart and they are checking out, but something went wrong!", [$products_to_update, $result]);
             return;
         }
-        self::log_info("Updated stock for product IDs (" . implode(',', $products_to_update) . ") as it's in someone's cart and they are checking out.");
+        self::log_info("Updated stock for products as it's in someone's cart and they are checking out.", $products_to_update);
     }
 
     public function update_points() {

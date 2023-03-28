@@ -140,7 +140,7 @@ function aralco_new_sync() {
         Aralco_WooCommerce_Connector::log_error("Getting server time failed", $server_time);
         return $server_time;
     } else if (is_array($server_time) && isset($server_time['UtcOffset'])) {
-        $server_time['UtcOffset'] -= 120; // Adds an extra 2 hours to the sync to adjust for server de-syncs
+        $server_time['UtcOffset'] -= 60; // Adds an extra hour to the sync to adjust for server de-syncs
         $sign = ($server_time['UtcOffset'] > 0) ? '+' : '-';
         if ($server_time['UtcOffset'] < 0) {
             $server_time['UtcOffset'] = $server_time['UtcOffset'] * -1;
