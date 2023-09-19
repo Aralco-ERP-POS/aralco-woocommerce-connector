@@ -3,7 +3,7 @@
  * Plugin Name: Aralco WooCommerce Connector
  * Plugin URI: https://github.com/sonicer105/aralcowoocon
  * Description: WooCommerce Connector for Aralco POS Systems.
- * Version: 1.26.1
+ * Version: 1.26.2
  * Author: Elias Turner, Aralco
  * Author URI: https://aralco.com
  * Requires at least: 5.0
@@ -14,7 +14,7 @@
  * WC tested up to: 5.3.0
  *
  * @package Aralco_WooCommerce_Connector
- * @version 1.26.1
+ * @version 1.26.2
  */
 
 defined( 'ABSPATH' ) or die(); // Prevents direct access to file.
@@ -131,7 +131,6 @@ class Aralco_WooCommerce_Connector {
             add_filter('woocommerce_order_item_quantity_html', array($this, 'order_item_quantity_html'), 100, 2);
             add_filter('woocommerce_email_order_item_quantity', array($this, 'order_item_quantity_html'), 100, 2);
             add_filter('woocommerce_display_item_meta', array($this, 'display_item_meta'), 100, 3);
-//            add_filter('woocommerce_email', array($this, 'email'), 100);
 
             // register aralco id field display (for admins)
             add_action('woocommerce_product_meta_start', array($this, 'display_aralco_id'), 101, 0);
@@ -177,9 +176,10 @@ class Aralco_WooCommerce_Connector {
             $lang = ' lang="en_CA"';
         }
 
+        /** @noinspection HtmlUnknownAttribute */
         printf(
             '<div class="error notice is-dismissible notice-info">
-<p><span dir="ltr"%s>%s</span></p>
+<p><span dir="ltr" %s>%s</span></p>
 </div>',
             $lang,
             wptexturize(__(
@@ -204,22 +204,7 @@ class Aralco_WooCommerce_Connector {
         if(!is_array($aralco_groups)) $aralco_groups = array();
     }
 
-    /**
-     * Register email class overrides
-     */
-    public function register_email_classes($email_classes) {
-        $email_classes['WC_Email_New_Order']                 = require __DIR__ . '/woocommerce/emails/class-wc-email-new-order.php';
-        $email_classes['WC_Email_Cancelled_Order']           = require __DIR__ . '/woocommerce/emails/class-wc-email-cancelled-order.php';
-        $email_classes['WC_Email_Failed_Order']              = require __DIR__ . '/woocommerce/emails/class-wc-email-failed-order.php';
-        $email_classes['WC_Email_Customer_On_Hold_Order']    = require __DIR__ . '/woocommerce/emails/class-wc-email-customer-on-hold-order.php';
-        $email_classes['WC_Email_Customer_Processing_Order'] = require __DIR__ . '/woocommerce/emails/class-wc-email-customer-processing-order.php';
-        $email_classes['WC_Email_Customer_Completed_Order']  = require __DIR__ . '/woocommerce/emails/class-wc-email-customer-completed-order.php';
-        $email_classes['WC_Email_Customer_Refunded_Order']   = require __DIR__ . '/woocommerce/emails/class-wc-email-customer-refunded-order.php';
-//        $email_classes['WC_Email_Customer_Invoice']          = require __DIR__ . '/woocommerce/emails/class-wc-email-customer-invoice.php';
-        $email_classes['WC_Email_Customer_Note']             = require __DIR__ . '/woocommerce/emails/class-wc-email-customer-note.php';
-
-        return $email_classes;
-    }
+#region Admin Page Registration
 
     /**
      * Callback that registers the settings and rendering callbacks used to drawing the settings.
@@ -700,6 +685,10 @@ class Aralco_WooCommerce_Connector {
         require_once 'partials/aralco-admin-settings-display.php';
     }
 
+#endregion
+
+#region WooCommerce Template Dir Registration, Script Registration
+
     public function plugin_path() {
         // gets the absolute path to this plugin directory
         return untrailingslashit(plugin_dir_path(__FILE__));
@@ -754,6 +743,10 @@ class Aralco_WooCommerce_Connector {
             }
         }
     }
+
+#endregion
+
+#region Special Admin Panel Tools (Subject to Change or Removal)
 
     /**
      * Method called to test the connection settings from the GUI. Adds settings errors that will be shown on the next
@@ -819,6 +812,7 @@ class Aralco_WooCommerce_Connector {
             array('<=', $backorder_stock_status),
             array('>', 'instock')
         ) as $i => $operation){
+            /** @noinspection SqlResolve */
             $rows = $wpdb->get_results("SELECT DISTINCT post_id FROM {$wpdb->prefix}postmeta WHERE meta_key = '_stock' AND meta_value {$operation[0]} 0", ARRAY_A);
             $ids = [];
             foreach ($rows as $row) {
@@ -829,6 +823,7 @@ class Aralco_WooCommerce_Connector {
 
             $ids = implode(', ', $ids);
 
+            /** @noinspection SqlResolve */
             $q = "UPDATE {$wpdb->prefix}postmeta SET meta_value = '{$operation[1]}' WHERE meta_key = '_stock_status' AND post_id IN ({$ids})";
 
 //            add_settings_error(
@@ -870,11 +865,14 @@ class Aralco_WooCommerce_Connector {
         global $wpdb;
         /** @noinspection SqlResolve */
         $wpdb->query("DELETE FROM {$wpdb->prefix}options WHERE option_name like '" . ARALCO_SLUG . "_last_sync_%'" );
-        return;
     }
 
+#endregion
+
+#region Background Sync Handling
+
     /**
-     * Method called to sync products by WordPress cron. Unlike sync_products, this method provides no feedback and takes no options.
+     * Method called to sync products by WordPress cron. Unlike sync_products, this method provides no feedback and uses the pre-saved options.
      */
     public function sync_products_quite() {
         self::log_info('CRON started automatic sync!');
@@ -905,6 +903,7 @@ class Aralco_WooCommerce_Connector {
 
     /**
      * Registers our custom interval with cron.
+     *
      * @param $schedules mixed (internal)
      * @return mixed (internal)
      */
@@ -945,7 +944,7 @@ class Aralco_WooCommerce_Connector {
     }
 
     /**
-     * Plugin Activation Hook
+     * Plugin Activation Hook (Unschedule Sync)
      */
     public function plugin_deactivation_hook() {
         self::log_warning('Plugin deactivated!', null, true);
@@ -962,10 +961,15 @@ class Aralco_WooCommerce_Connector {
         }
     }
 
+#endregion
+
+#region Login Handling and Customer Profile to BOS Updates
+
     /**
      * Registers new user as customer in Aralco
      *
      * @param int $user_id the id of the new wordpress user
+     * @noinspection PhpMissingParamTypeInspection
      */
     public function new_customer($user_id) {
         $id = Aralco_Processing_Helper::process_new_customer($user_id);
@@ -978,6 +982,7 @@ class Aralco_WooCommerce_Connector {
      * Get aralco info for user that just logged in and cache it
      *
      * @param string $username the user's name
+     * @noinspection PhpMissingParamTypeInspection
      */
     public function customer_login($username) {
         $user = get_user_by('login', $username);
@@ -1025,6 +1030,7 @@ class Aralco_WooCommerce_Connector {
      * Intermediary call to update customer profile on login
      *
      * @param $username string
+     * @noinspection PhpMissingParamTypeInspection
      */
     public function trigger_update_customer_info($username) {
         $user = get_user_by('login', $username);
@@ -1039,6 +1045,7 @@ class Aralco_WooCommerce_Connector {
      * Update customer profile in Aralco
      *
      * @param $user WP_User
+     * @noinspection PhpMissingParamTypeInspection
      */
     public function update_customer_info($user) {
         $aralco_data = get_user_meta($user->ID, "aralco_data", true);
@@ -1052,6 +1059,13 @@ class Aralco_WooCommerce_Connector {
         }
     }
 
+#endregion
+
+#region Create Account on Password Reset if Email Exists in BOS
+
+    /**
+     * Intercept the lost password form to do some custom logic (see method below this one)
+     */
     public function intercept_lost_password_form() {
         if (isset($_POST['wc_reset_password'], $_POST['user_login'])) {
 
@@ -1069,6 +1083,11 @@ class Aralco_WooCommerce_Connector {
         }
     }
 
+    /**
+     * Attempt to import a user from aralco into woocommerce implicitly from the password recovery form. Sends a password reset email on success.
+     *
+     * @return bool
+     */
     public function import_user_from_aralco() {
         $data = Aralco_Connection_Helper::getCustomer('UserName', $_POST['user_login']);
 
@@ -1092,6 +1111,10 @@ class Aralco_WooCommerce_Connector {
         return WC_Shortcode_My_Account::retrieve_password();
     }
 
+#endregion
+
+#region Require Login to View Store
+
     public function require_customer_login(){
         if(is_user_logged_in()) return;
         $options = get_option(ARALCO_SLUG . '_options');
@@ -1100,13 +1123,19 @@ class Aralco_WooCommerce_Connector {
             global $wp;
             if(!is_page('my-account')) {
                 wp_redirect(home_url('my-account/my-account'));
-            } else if(!isset($_GET['password-reset']) && home_url($wp->request) . '/' != wc_lostpassword_url()) {
-//                wc_add_notice(__('Have an account but don\'t know the password? Click <a href="' . wc_lostpassword_url() . '">HERE</a> to set a new one.', ARALCO_SLUG) , 'notice');
-            }
+            } /* else if(!isset($_GET['password-reset']) && home_url($wp->request) . '/' != wc_lostpassword_url()) {
+                wc_add_notice(__('Have an account but don\'t know the password? Click <a href="' . wc_lostpassword_url() . '">HERE</a> to set a new one.', ARALCO_SLUG) , 'notice');
+            } */
         }
     }
 
+#endregion
+
+#region Units of Measure
+
     /**
+     * Alter the product page price display (Units of Measure)
+     *
      * @param string $price_html
      * @param WC_Product $product
      * @return string
@@ -1139,6 +1168,8 @@ class Aralco_WooCommerce_Connector {
     }
 
     /**
+     * Alter the per item cart price display (Units of Measure)
+     *
      * @param string $price_html
      * @param array $product
      * @return string
@@ -1154,10 +1185,13 @@ class Aralco_WooCommerce_Connector {
     }
 
     /**
+     * Alter subtotal after products have been calculated (Units of Measure)
+     *
      * @param string $product_subtotal
      * @param array $product cart item
      * @param string $cart_item_key
      * @return string
+     * @noinspection PhpDocSignatureInspection, PhpMissingParamTypeInspection
      */
     public function alter_cart_item_subtotal_display($product_subtotal, $cart_item, $cart_item_key) {
         $sell_by = get_post_meta($cart_item['product_id'], '_aralco_sell_by', true);
@@ -1173,10 +1207,13 @@ class Aralco_WooCommerce_Connector {
     }
 
     /**
+     * Alter quantity display for Units of Measure on Cart page
+     *
      * @param string $quantity_html
      * @param array $cart_item
      * @param string $cart_item_key
      * @return string
+     * @noinspection PhpMissingParamTypeInspection
      */
     public function alter_cart_quantity_display($quantity_html, $cart_item, $cart_item_key) {
         $sell_by = get_post_meta($cart_item['product_id'], '_aralco_sell_by', true);
@@ -1190,9 +1227,317 @@ class Aralco_WooCommerce_Connector {
     }
 
     /**
+     * Replace stock available text to support Units of Measure
+     *
+     * @param int $stock_quantity Stock quantity
+     * @param WC_Product $product Product instance
+     * @return string
+     */
+    public function alter_availability_text($stock_quantity, $product) {
+        $sell_by = get_post_meta($product->get_id(), '_aralco_sell_by', true);
+        $unit = (is_array($sell_by) && !empty($sell_by['code']))? ' ' . $sell_by['code'] : '';
+        $multi = (is_array($sell_by) && is_numeric($sell_by['multi']))? $sell_by['multi'] : 1;
+        $decimals = (is_array($sell_by) && is_numeric($sell_by['decimals']))? $sell_by['decimals'] : 0;
+        if($decimals > 0) {
+            return round(($stock_quantity / $multi) / (10 ** $decimals), $decimals) . $unit;
+        }
+        return round($stock_quantity / $multi) . $unit;
+    }
+
+    /**
+     * Replace the add to cart button to support Units of Measure
+     *
+     * @param string $html
+     * @param WC_Product $product
+     * @return string
+     */
+    public function replacing_add_to_cart_button($html, $product) {
+        $sell_by = get_post_meta($product->get_id(), '_aralco_sell_by', true);
+        $is_unit = is_array($sell_by) && !empty($sell_by['code']);
+        if ($is_unit) {
+            $button_text = __("Select qty", "woocommerce");
+            $html = '<a class="button" href="' . $product->get_permalink() . '">' . $button_text . '</a>';
+        }
+        return $html;
+    }
+
+    /**
+     * Update product list view to support Unites of Measure
+     *
+     * @param string $html
+     * @param object $data
+     * @param WC_Product $product
+     * @return string
+     * @noinspection PhpMissingParamTypeInspection
+     */
+    public function blocks_product_grid_item_html($html, $data, $product) {
+        $sell_by = get_post_meta($product->get_id(), '_aralco_sell_by', true);
+        if(!is_array($sell_by) || empty($sell_by['code'])) return $html;
+
+        $attributes = array(
+            'aria-label'       => $product->add_to_cart_description(),
+//            'data-quantity'    => '1',
+//            'data-product_id'  => $product->get_id(),
+//            'data-product_sku' => $product->get_sku(),
+            'rel'              => 'nofollow',
+            'class'            => 'wp-block-button__link add_to_cart_button',
+        );
+
+        if ($product->supports('ajax_add_to_cart')) {
+            $attributes['class'] .= ' ajax_add_to_cart';
+        }
+
+        /** @noinspection HtmlUnknownTarget, HtmlUnknownAttribute */
+        $button = sprintf(
+            '<a href="%s" %s>%s</a>',
+            esc_url($product->get_permalink()),
+            wc_implode_html_attributes( $attributes ),
+            esc_html(__('Select qty', ARALCO_SLUG)/*$product->add_to_cart_text()*/)
+        );
+        $button = '<div class="wp-block-button wc-block-grid__product-add-to-cart">' . $button. '</div>';
+
+        return "<li class=\"wc-block-grid__product\">
+    <a href=\"{$data->permalink}\" class=\"wc-block-grid__product-link\">
+        {$data->image}
+        {$data->title}
+    </a>
+    {$data->badge}
+    {$data->price}
+    {$data->rating}
+    $button
+</li>";
+    }
+
+    /**
+     * Modifies quantity selection on product page to allow units of measure
+     */
+    public function replace_quantity_field() {
+        if (is_cart()) return;
+        global $post;
+        if(empty($post)) return;
+//        echo "<pre>" . print_r($post, true) . "</pre>";
+        $sell_by = get_post_meta($post->ID, '_aralco_sell_by', true);
+        $is_unit = is_array($sell_by) && !empty($sell_by['code']);
+        if($is_unit) {
+            $decimal = (!empty($sell_by['decimals']))? $sell_by['decimals'] : 0;
+            if ($decimal > 0) {
+                $min = number_format(1 / (10 ** $decimal), $decimal);
+                $size = $decimal + 4;
+                /** @noinspection JSJQueryEfficiency, JSUnresolvedVariable, JSCheckFunctionSignatures */
+                wc_enqueue_js(/** @lang JavaScript */ "$(function(){ if(window.ranQtySwitch) return; $('form.cart input.qty').prop('value', '').prop('step', '${min}')
+.prop('min', '${min}').prop('inputmode', 'decimal').prop('size', '${size}').css('width', '100px').attr('inputmode', 'decimal')
+.prop('name', '').after('<input type=\"hidden\" class=\"true-qty\" name=\"quantity\" value=\"\">');
+$('form.cart').on('submit', function() {
+    if(!document.querySelector('form.cart input.qty').value) return false;
+    let decVal = parseFloat(document.querySelector('form.cart input.qty').value);
+    document.querySelector('form.cart input.true-qty').value = decVal * Math.pow(10, ${decimal})
+});
+if(!$('form.cart input.qty').val()) $('form.cart input.qty').val('1');
+window.ranQtySwitch = true;
+});");
+            }
+            echo $sell_by['code'];
+        }
+    }
+
+    /**
+     * Modifies quantity selection on cart page to allow units of measure
+     *
+     * @param string $product_quantity
+     * @param int|string $cart_item_key
+     * @param array $cart_item
+     * @return string
+     * @noinspection PhpMissingParamTypeInspection
+     */
+    public function cart_item_quantity($product_quantity, $cart_item_key, $cart_item) {
+        $sell_by = get_post_meta($cart_item['product_id'], '_aralco_sell_by', true);
+        $is_unit = is_array($sell_by) && !empty($sell_by['code']);
+        if($is_unit) {
+            $decimal = (!empty($sell_by['decimals']))? $sell_by['decimals'] : 0;
+            $code = $sell_by['code'];
+            if ($decimal > 0) {
+                $min = number_format(1 / (10 ** $decimal), $decimal);
+                /** @noinspection JSJQueryEfficiency, JSCheckFunctionSignatures, JSUnnecessarySemicolon */
+                $repeated_snippet = /** @lang JavaScript */ "
+if(!$('.woocommerce-cart-form input[name=\"cart[$cart_item_key][qty]\"]').data('processed')){
+    $('.woocommerce-cart-form input[name=\"cart[$cart_item_key][qty]\"]')
+        .hide()
+        .data('processed', true)
+        .after(
+            $('.woocommerce-cart-form input[name=\"cart[$cart_item_key][qty]\"]')
+            .clone(true)
+            .off()
+            .show()
+            .prop('min', '$min')
+            .prop('step', '$min')
+            .prop('name', '')
+            .prop('id', '')
+            .val(parseFloat($('.woocommerce-cart-form input[name=\"cart[$cart_item_key][qty]\"]').val() / Math.pow(10, ${decimal})))
+            .prop('value', parseFloat($('.woocommerce-cart-form input[name=\"cart[$cart_item_key][qty]\"]').val() / Math.pow(10, ${decimal})))
+            .on('change', function (e){
+                let multiple = Math.pow(10, ${decimal});
+                let val = Math.round($(this).val() * multiple) / multiple;
+                $(this).val(val);
+                $(this).prop('value', val);
+                $('.woocommerce-cart-form input[name=\"cart[$cart_item_key][qty]\"]').val(Math.round(val * multiple));
+            })
+        )
+        .removeClass('qty');
+}
+";
+            } else {
+                $repeated_snippet = /** @lang JavaScript */ "$('.woocommerce-cart-form input[name=\"cart[$cart_item_key][qty]\"]').after('&nbsp;$code')";
+            }
+            wc_enqueue_js(/** @lang JavaScript */ "$repeated_snippet
+$(document.body).on('updated_wc_div', function() {
+$repeated_snippet
+})");
+        }
+        return $product_quantity;
+    }
+
+    /**
+     * Suppresses old add to cart qty template
+     *
+     * @param $amount_html
+     * @return string
+     */
+    public function add_to_cart_qty_html($amount_html) {
+        return '';
+    }
+
+    /**
+     * Adds hint text under the add to cart button on product page
+     */
+    public function add_decimal_text() {
+        global $product;
+        $sell_by = get_post_meta($product->get_id(), '_aralco_sell_by', true);
+        $is_unit = is_array($sell_by) && !empty($sell_by['code']);
+        if($is_unit) {
+            $decimal = (!empty($sell_by['decimals']))? $sell_by['decimals'] : 0;
+            if($decimal > 0) {
+                echo "<div>Up to ${decimal} decimal places.</div>";
+            }
+        }
+    }
+
+    /**
+     * Filters the cart item count to work with unites of measure
+     *
+     * @param int $quantity
+     * @return int
+     * @noinspection PhpMissingParamTypeInspection
+     */
+    public function cart_contents_count($quantity){
+        global $woocommerce;
+        $items = $woocommerce->cart->get_cart();
+        $count = 0;
+        foreach ($items as $item){
+            $sell_by = get_post_meta($item['product_id'], '_aralco_sell_by', true);
+            $is_unit = is_array($sell_by) && !empty($sell_by['code']);
+            $count += ($is_unit)? 1 : $item['quantity'];
+        }
+        return $count;
+    }
+
+    /**
+     * Displays the unit of measure for a product quantity on checkout page
+     *
+     * @param string $quantity_html
+     * @param array $cart_item
+     * @param string|int $cart_item_key
+     * @return string
+     * @noinspection PhpMissingParamTypeInspection
+     */
+    public function widget_cart_item_quantity($quantity_html, $cart_item, $cart_item_key){
+        $sell_by = get_post_meta($cart_item['product_id'], '_aralco_sell_by', true);
+        $unit = (is_array($sell_by) && !empty($sell_by['code']))? ' ' . $sell_by['code'] : '';
+        $decimals = (is_array($sell_by) && is_numeric($sell_by['decimals']))? $sell_by['decimals'] : 0;
+        $quantity = ($decimals > 0)? $cart_item['quantity'] / (10 ** $decimals) : $cart_item['quantity'];
+        $product_price = apply_filters('woocommerce_cart_item_price', WC()->cart->get_product_price(wc_get_product($cart_item['product_id'])), $cart_item, $cart_item_key);
+        return '<span class="quantity">' . sprintf( '%s &times; %s', $quantity . $unit, $product_price ) . '</span>';
+    }
+
+    /**
+     * Displays the unit of measure for a product quantity on single order page
+     *
+     * @param string $html
+     * @param WC_Order_Item_Product $item
+     * @return string
+     * @noinspection PhpMissingParamTypeInspection
+     */
+    public function order_item_quantity_html($html, $item) {
+        $sell_by = get_post_meta($item->get_product_id(), '_aralco_sell_by', true);
+        if (!is_array($sell_by)) return $html;
+
+        $unit = (!empty($sell_by['code']))? ' ' . $sell_by['code'] : '';
+        if (empty($sell_by['code'])) return $html;
+
+        $decimals = (is_numeric($sell_by['decimals']))? $sell_by['decimals'] : 0;
+        if ($decimals <= 0) return $html . $unit;
+
+        $order = $item->get_order();
+        $refunded_qty = $order->get_qty_refunded_for_item($item->get_id());
+        $qty = $item->get_quantity() / (10 ** $decimals);
+
+        if ($refunded_qty) {
+            $refunded_qty = $refunded_qty / (10 ** $decimals);
+            $qty_display = '<del>' . esc_html($qty) . '</del> <ins>' . esc_html($qty - ($refunded_qty * -1)) . '</ins>';
+        } else {
+            $qty_display = esc_html($qty);
+        }
+
+        if(strpos($html, 'product-quantity') !== false) {
+            return ' <strong class="product-quantity">' . sprintf( '&times;&nbsp;%s', $qty_display ) . '</strong>' . $unit;
+        }
+
+        return $qty_display . $unit;
+    }
+
+    /**
+     * Display units of measure on product page
+     *
+     * Source copied from wc-template-functions.php function wc_display_item_meta
+     * @see ../woocommerce/includes/wc-template-functions.php
+     * @param string $old_html
+     * @param WC_Order_Item $item
+     * @param array $args
+     * @return string
+     * @noinspection PhpMissingParamTypeInspection
+     */
+    public function display_item_meta($old_html, $item, $args) {
+        $strings = array();
+        $html = '';
+
+        foreach ($item->get_formatted_meta_data() as $meta_id => $meta) {
+            if ($meta->key == 'Backordered') {
+                $sell_by = get_post_meta($item->get_product_id(), '_aralco_sell_by', true);
+                $unit = (is_array($sell_by) && !empty($sell_by['code']))? ' ' . $sell_by['code'] : '';
+                $decimals = (is_array($sell_by) && is_numeric($sell_by['decimals']))? $sell_by['decimals'] : 0;
+                if ($decimals > 0) {
+                    $meta->display_value = round($meta->value / (10 ** $decimals), $decimals) . $unit;
+                }
+            }
+            $value = $args['autop']? wp_kses_post($meta->display_value) : wp_kses_post(make_clickable(trim($meta->display_value)));
+            $strings[] = $args['label_before'] . wp_kses_post($meta->display_key) . $args['label_after'] . $value;
+        }
+
+        if ($strings) {
+            $html = $args['before'] . implode($args['separator'], $strings) . $args['after'];
+        }
+
+        return $html;
+    }
+
+#endregion
+
+#region Units of Measure and Customer Group Price Relevant Code (Alter Price)
+
+    /**
      * Changes the display price based on customer group discount and UoM
      *
      * @param WC_Cart $cart
+     * @noinspection PhpMissingParamTypeInspection
      */
     public function alter_price_cart($cart) {
         // Don't do this for ajax calls or the admin interface
@@ -1237,298 +1582,9 @@ class Aralco_WooCommerce_Connector {
         do_action('aralco_changed_quantity');
     }
 
-    /**
-     * @param int $stock_quantity Stock quantity
-     * @param WC_Product $product Product instance
-     * @return string
-     */
-    public function alter_availability_text($stock_quantity, $product) {
-        $sell_by = get_post_meta($product->get_id(), '_aralco_sell_by', true);
-        $unit = (is_array($sell_by) && !empty($sell_by['code']))? ' ' . $sell_by['code'] : '';
-        $multi = (is_array($sell_by) && is_numeric($sell_by['multi']))? $sell_by['multi'] : 1;
-        $decimals = (is_array($sell_by) && is_numeric($sell_by['decimals']))? $sell_by['decimals'] : 0;
-        if($decimals > 0) {
-            return round(($stock_quantity / $multi) / (10 ** $decimals), $decimals) . $unit;
-        }
-        return round($stock_quantity / $multi) . $unit;
-    }
+#endregion
 
-    /**
-     * @param string $html
-     * @param WC_Product $product
-     * @return string
-     */
-    public function replacing_add_to_cart_button($html, $product) {
-        $sell_by = get_post_meta($product->get_id(), '_aralco_sell_by', true);
-        $is_unit = is_array($sell_by) && !empty($sell_by['code']);
-        if ($is_unit) {
-            $button_text = __("Select qty", "woocommerce");
-            $html = '<a class="button" href="' . $product->get_permalink() . '">' . $button_text . '</a>';
-        }
-        return $html;
-    }
-
-    /**
-     * @param string $html
-     * @param object $data
-     * @param WC_Product $product
-     * @return string
-     */
-    public function blocks_product_grid_item_html($html, $data, $product) {
-        $sell_by = get_post_meta($product->get_id(), '_aralco_sell_by', true);
-        if(!is_array($sell_by) || empty($sell_by['code'])) return $html;
-
-        $attributes = array(
-            'aria-label'       => $product->add_to_cart_description(),
-//            'data-quantity'    => '1',
-//            'data-product_id'  => $product->get_id(),
-//            'data-product_sku' => $product->get_sku(),
-            'rel'              => 'nofollow',
-            'class'            => 'wp-block-button__link add_to_cart_button',
-        );
-
-        if ($product->supports('ajax_add_to_cart')) {
-            $attributes['class'] .= ' ajax_add_to_cart';
-        }
-
-        $button = sprintf(
-            '<a href="%s" %s>%s</a>',
-            esc_url($product->get_permalink()),
-            wc_implode_html_attributes( $attributes ),
-            esc_html(__('Select qty', ARALCO_SLUG)/*$product->add_to_cart_text()*/)
-        );
-        $button = '<div class="wp-block-button wc-block-grid__product-add-to-cart">' . $button. '</div>';
-
-        return "<li class=\"wc-block-grid__product\">
-    <a href=\"{$data->permalink}\" class=\"wc-block-grid__product-link\">
-        {$data->image}
-        {$data->title}
-    </a>
-    {$data->badge}
-    {$data->price}
-    {$data->rating}
-    $button
-</li>";
-    }
-
-    public function replace_quantity_field() {
-        if (is_cart()) return;
-        global $post;
-        if(empty($post)) return;
-//        echo "<pre>" . print_r($post, true) . "</pre>";
-        $sell_by = get_post_meta($post->ID, '_aralco_sell_by', true);
-        $is_unit = is_array($sell_by) && !empty($sell_by['code']);
-        if($is_unit) {
-            $decimal = (!empty($sell_by['decimals']))? $sell_by['decimals'] : 0;
-            if ($decimal > 0) {
-                $min = number_format(1 / (10 ** $decimal), $decimal);
-                $size = $decimal + 4;
-                wc_enqueue_js(/** @lang JavaScript */ "$(function(){ if(window.ranQtySwitch) return; $('form.cart input.qty').prop('value', '').prop('step', '${min}')
-.prop('min', '${min}').prop('inputmode', 'decimal').prop('size', '${size}').css('width', '100px').attr('inputmode', 'decimal')
-.prop('name', '').after('<input type=\"hidden\" class=\"true-qty\" name=\"quantity\" value=\"\">');
-$('form.cart').on('submit', function() {
-    if(!document.querySelector('form.cart input.qty').value) return false;
-    let decVal = parseFloat(document.querySelector('form.cart input.qty').value);
-    document.querySelector('form.cart input.true-qty').value = decVal * Math.pow(10, ${decimal})
-});
-if(!$('form.cart input.qty').val()) $('form.cart input.qty').val('1');
-window.ranQtySwitch = true;
-});");
-            }
-            echo $sell_by['code'];
-        }
-    }
-
-    /**
-     * @param string $product_quantity
-     * @param int|string $cart_item_key
-     * @param array $cart_item
-     * @return string
-     */
-    public function cart_item_quantity($product_quantity, $cart_item_key, $cart_item) {
-        $sell_by = get_post_meta($cart_item['product_id'], '_aralco_sell_by', true);
-        $is_unit = is_array($sell_by) && !empty($sell_by['code']);
-        if($is_unit) {
-            $decimal = (!empty($sell_by['decimals']))? $sell_by['decimals'] : 0;
-            $code = $sell_by['code'];
-            if ($decimal > 0) {
-                $min = number_format(1 / (10 ** $decimal), $decimal);
-                $repeated_snippet = /** @lang JavaScript */ "
-if(!$('.woocommerce-cart-form input[name=\"cart[$cart_item_key][qty]\"]').data('processed')){
-    $('.woocommerce-cart-form input[name=\"cart[$cart_item_key][qty]\"]')
-        .hide()
-        .data('processed', true)
-        .after(
-            $('.woocommerce-cart-form input[name=\"cart[$cart_item_key][qty]\"]')
-            .clone(true)
-            .off()
-            .show()
-            .prop('min', '$min')
-            .prop('step', '$min')
-            .prop('name', '')
-            .prop('id', '')
-            .val(parseFloat($('.woocommerce-cart-form input[name=\"cart[$cart_item_key][qty]\"]').val() / Math.pow(10, ${decimal})))
-            .prop('value', parseFloat($('.woocommerce-cart-form input[name=\"cart[$cart_item_key][qty]\"]').val() / Math.pow(10, ${decimal})))
-            .on('change', function (e){
-                let multiple = Math.pow(10, ${decimal});
-                let val = Math.round($(this).val() * multiple) / multiple;
-                $(this).val(val);
-                $(this).prop('value', val);
-                $('.woocommerce-cart-form input[name=\"cart[$cart_item_key][qty]\"]').val(Math.round(val * multiple));
-            })
-        )
-        .removeClass('qty');
-}
-";
-            } else {
-                $repeated_snippet = /** @lang JavaScript */ "$('.woocommerce-cart-form input[name=\"cart[$cart_item_key][qty]\"]').after('&nbsp;$code')";
-            }
-            wc_enqueue_js(/** @lang JavaScript */ "$repeated_snippet
-$(document.body).on('updated_wc_div', function() {
-$repeated_snippet
-})");
-        }
-        return $product_quantity;
-    }
-
-    public function add_to_cart_qty_html($amount_html) {
-        return '';
-    }
-
-    public function add_decimal_text() {
-        /** @var $product WC_Product */
-        global $product;
-        $sell_by = get_post_meta($product->get_id(), '_aralco_sell_by', true);
-        $is_unit = is_array($sell_by) && !empty($sell_by['code']);
-        if($is_unit) {
-            $decimal = (!empty($sell_by['decimals']))? $sell_by['decimals'] : 0;
-            if($decimal > 0) {
-                echo "<div>Up to ${decimal} decimal places.</div>";
-            }
-        }
-    }
-
-    /**
-     * @param int $quantity
-     * @return int
-     */
-    public function cart_contents_count($quantity){
-        global $woocommerce;
-        $items = $woocommerce->cart->get_cart();
-        $count = 0;
-        foreach ($items as $item){
-            $sell_by = get_post_meta($item['product_id'], '_aralco_sell_by', true);
-            $is_unit = is_array($sell_by) && !empty($sell_by['code']);
-            $count += ($is_unit)? 1 : $item['quantity'];
-        }
-        return $count;
-    }
-
-    /**
-     * @param string $quantity_html
-     * @param array $cart_item
-     * @param string|int $cart_item_key
-     * @return string
-     */
-    public function widget_cart_item_quantity($quantity_html, $cart_item, $cart_item_key){
-        $sell_by = get_post_meta($cart_item['product_id'], '_aralco_sell_by', true);
-        $unit = (is_array($sell_by) && !empty($sell_by['code']))? ' ' . $sell_by['code'] : '';
-        $decimals = (is_array($sell_by) && is_numeric($sell_by['decimals']))? $sell_by['decimals'] : 0;
-        $quantity = ($decimals > 0)? $cart_item['quantity'] / (10 ** $decimals) : $cart_item['quantity'];
-        $product_price = apply_filters('woocommerce_cart_item_price', WC()->cart->get_product_price(wc_get_product($cart_item['product_id'])), $cart_item, $cart_item_key);
-        return '<span class="quantity">' . sprintf( '%s &times; %s', $quantity . $unit, $product_price ) . '</span>';
-    }
-
-    /**
-     * @param string $html
-     * @param WC_Order_Item_Product $item
-     * @return string
-     */
-    public function order_item_quantity_html($html, $item) {
-        $sell_by = get_post_meta($item->get_product_id(), '_aralco_sell_by', true);
-        if (!is_array($sell_by)) return $html;
-
-        $unit = (!empty($sell_by['code']))? ' ' . $sell_by['code'] : '';
-        if (empty($sell_by['code'])) return $html;
-
-        $decimals = (is_array($sell_by) && is_numeric($sell_by['decimals']))? $sell_by['decimals'] : 0;
-        if ($decimals <= 0) return $html . $unit;
-
-        $order = $item->get_order();
-        $refunded_qty = $order->get_qty_refunded_for_item($item->get_id());
-        $qty = $item->get_quantity() / (10 ** $decimals);
-
-        if ($refunded_qty) {
-            $refunded_qty = $refunded_qty / (10 ** $decimals);
-            $qty_display = '<del>' . esc_html($qty) . '</del> <ins>' . esc_html($qty - ($refunded_qty * -1)) . '</ins>';
-        } else {
-            $qty_display = esc_html($qty);
-        }
-
-        if(strpos($html, 'product-quantity') !== false) {
-            return ' <strong class="product-quantity">' . sprintf( '&times;&nbsp;%s', $qty_display ) . '</strong>' . $unit;
-        }
-
-        return $qty_display . $unit;
-    }
-
-    /**
-     * Source copied from wc-template-functions.php function wc_display_item_meta
-     * @see ../woocommerce/includes/wc-template-functions.php
-     *
-     * @param string $old_html
-     * @param WC_Order_Item $item
-     * @param array $args
-     * @return string
-     */
-    public function display_item_meta($old_html, $item, $args) {
-        $strings = array();
-        $html = '';
-
-        foreach ($item->get_formatted_meta_data() as $meta_id => $meta) {
-            if ($meta->key == 'Backordered') {
-                $sell_by = get_post_meta($item->get_product_id(), '_aralco_sell_by', true);
-                $unit = (is_array($sell_by) && !empty($sell_by['code']))? ' ' . $sell_by['code'] : '';
-                $decimals = (is_array($sell_by) && is_numeric($sell_by['decimals']))? $sell_by['decimals'] : 0;
-                if ($decimals > 0) {
-                    $meta->display_value = round($meta->value / (10 ** $decimals), $decimals) . $unit;
-                }
-            }
-            $value = $args['autop']? wp_kses_post($meta->display_value) : wp_kses_post(make_clickable(trim($meta->display_value)));
-            $strings[] = $args['label_before'] . wp_kses_post($meta->display_key) . $args['label_after'] . $value;
-        }
-
-        if ($strings) {
-            $html = $args['before'] . implode($args['separator'], $strings) . $args['after'];
-        }
-
-        return $html;
-    }
-
-    /**
-     * Displays aralco ID for admins
-     */
-    public function display_aralco_id() {
-        if(current_user_can('administrator')) {
-            $id = get_post_meta(get_the_ID(), '_aralco_id', true);
-            if ($id == false) {
-                $id = get_post_meta(wp_get_post_parent_id(get_the_ID()), '_aralco_id', true);
-            }
-            if ($id == false) {
-                $id = 'Unknown';
-            }
-            echo '<span class="aralco_id_wrapper">Aralco ID: <span class="aralco_id">' . $id . '</span></span>';
-        }
-    }
-
-    /**
-     * @param WC_Email $email_class
-     */
-    public function email($email_class) {
-        remove_action('woocommerce_low_stock_notification', array($email_class, 'low_stock'));
-        remove_action('woocommerce_product_on_backorder_notification', array($email_class, 'backorder'));
-        remove_action('woocommerce_no_stock_notification', array($email_class, 'no_stock'));
-    }
+#region Customer Group Price
 
     /**
      * Takes the normal price and returns the discounted price.
@@ -1577,6 +1633,30 @@ $repeated_snippet
         return $normal_price;
     }
 
+#endregion
+
+#region Show Aralco ID to Admins on Product Page
+
+    /**
+     * Displays aralco ID for admins
+     */
+    public function display_aralco_id() {
+        if(current_user_can('administrator')) {
+            $id = get_post_meta(get_the_ID(), '_aralco_id', true);
+            if ($id == false) {
+                $id = get_post_meta(wp_get_post_parent_id(get_the_ID()), '_aralco_id', true);
+            }
+            if ($id == false) {
+                $id = 'Unknown';
+            }
+            echo '<span class="aralco_id_wrapper">Aralco ID: <span class="aralco_id">' . $id . '</span></span>';
+        }
+    }
+
+#endregion
+
+#region In-cart Refresh Stock
+
     public function cart_check_product_stock() {
 
         $products_to_update = [];
@@ -1613,10 +1693,24 @@ $repeated_snippet
         self::log_info("Updated stock for products as it's in someone's cart and they are checking out.", $products_to_update);
     }
 
+#endregion
+
+#region Points
+
+    /**
+     * Update points exchange from Aralco
+     */
     public function update_points() {
         Aralco_Processing_Helper::update_points_exchange();
     }
 
+    /**
+     * Process applying points to cart
+     *
+     * @param $total
+     * @param $cart
+     * @return float
+     */
     public function apply_points_discount($total, $cart) {
         $options = get_option(ARALCO_SLUG . '_options');
         $points_enabled = isset($options[ARALCO_SLUG . '_field_enable_points']) && $options[ARALCO_SLUG . '_field_enable_points'] == '1';
@@ -1636,6 +1730,11 @@ $repeated_snippet
         return $total;
     }
 
+    /**
+     * Process order with points
+     *
+     * @param $order_id
+     */
     public function complete_order_points($order_id) {
         $options = get_option(ARALCO_SLUG . '_options');
         $points_enabled = isset($options[ARALCO_SLUG . '_field_enable_points']) && $options[ARALCO_SLUG . '_field_enable_points'] == '1';
@@ -1660,7 +1759,15 @@ $repeated_snippet
         delete_user_meta(get_current_user_id(),'points_cache');
     }
 
-    /* @var $order WC_Order */
+    /**
+     * Display points paid and total other paid on order
+     *
+     * @param $total_rows
+     * @param WC_Order $order
+     * @param $tax_display
+     * @return array|array[]
+     * @noinspection PhpMissingParamTypeInspection
+     */
     public function points_get_order_item_totals($total_rows, $order, $tax_display) {
         $points_value = $order->get_meta('aralco_points_value', 'true', 'edit');
         if(empty($points_value)) return $total_rows;
@@ -1675,6 +1782,11 @@ $repeated_snippet
         return $new_total_rows;
     }
 
+    /**
+     * Adds widget to admin order view showing amount paid by points
+     *
+     * @param $order_id
+     */
     public function admin_points_display($order_id) {
         $order = wc_get_order($order_id);
         $points_value = $order->get_meta('aralco_points_value', 'true', 'edit');
@@ -1684,6 +1796,7 @@ $repeated_snippet
         <table class="wc-order-totals">
             <tr>
                 <td class="label"><?php esc_html_e('Amount Paid By Points', ARALCO_SLUG); ?>:</td>
+                <!--suppress HtmlDeprecatedAttribute -->
                 <td width="1%"></td>
                 <td class="total">
                     <?php echo wc_price($points_value, array('currency' => $order->get_currency())); // WPCS: XSS ok. ?>
@@ -1696,10 +1809,25 @@ $repeated_snippet
         <?php
     }
 
+    /**
+     * Shows the partial template for the points block on checkout
+     */
     public function show_points_block() {
         require_once 'partials/points-module.php';
     }
 
+#endregion
+
+#region Tax Calculations
+
+    /**
+     * Do custom tax calculations, since aralco tax behaves differently then woocommerce tax.
+     *
+     * @param $item_tax_rates
+     * @param $item
+     * @param $cart
+     * @return array
+     */
     public function calculate_custom_tax_totals($item_tax_rates, $item, $cart){
 
 //        WC_Tax::get_tax_location() -> {0 = CA, 1 = ON, 2 = V7P 3R9, 3 = Vancouver}
@@ -1713,6 +1841,7 @@ $repeated_snippet
             }
             $tax_ids = implode(',', $tax_ids);
             global $wpdb;
+            /** @noinspection SqlResolve */
             $taxes = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}woocommerce_tax_rates WHERE tax_rate_id IN ({$tax_ids}) ORDER BY tax_rate_priority, tax_rate_order", ARRAY_A);
 
 //            echo '<pre>' . print_r(WC_Tax::get_tax_location(), true) . '</pre>';
@@ -1760,8 +1889,95 @@ $repeated_snippet
         return $item_tax_rates;
     }
 
+#endregion
+
+#region Quote Allow No Payment
+
     /**
-     * Add the field to the checkout
+     * Deregister all payment options
+     */
+    public function quote_all_payment_gateway_disable($available_gateways) {
+        $options = get_option(ARALCO_SLUG . '_options');
+        if(isset($options[ARALCO_SLUG . '_field_order_is_quote']) &&
+            $options[ARALCO_SLUG . '_field_order_is_quote'] == '1') {
+            return [];
+        }
+        return $available_gateways;
+    }
+
+    /**
+     * Mark successfully placed quotes as processing instead of pending payment.
+     *
+     * @param $order_id
+     */
+    public function quote_update_order_status_pending($order_id) {
+        $options = get_option(ARALCO_SLUG . '_options');
+        if(isset($options[ARALCO_SLUG . '_field_order_is_quote']) &&
+            $options[ARALCO_SLUG . '_field_order_is_quote'] == '1') {
+            $order = new WC_Order($order_id);
+            $order->update_status('processing');
+        }
+    }
+
+    /**
+     * Set cart needs payment to false. This hides all the payment processors on checkout and allows no payment
+     *
+     * @param $total_is_0
+     * @param $cart
+     * @return false
+     */
+    public function quote_cart_needs_payment($total_is_0, $cart) {
+        $options = get_option(ARALCO_SLUG . '_options');
+        if(isset($options[ARALCO_SLUG . '_field_order_is_quote']) &&
+            $options[ARALCO_SLUG . '_field_order_is_quote'] == '1') {
+            return false;
+        }
+        return $total_is_0;
+    }
+
+    /**
+     * Sets order needs payment to false. This prevents moving quotes back to cart to pay for them.
+     *
+     * @param $this_has_status_valid_order_statuses_this_get_total_0
+     * @param $order
+     * @param $valid_order_statuses
+     * @return false
+     */
+    public function quote_order_needs_payment($this_has_status_valid_order_statuses_this_get_total_0, $order, $valid_order_statuses) {
+        $options = get_option(ARALCO_SLUG . '_options');
+        if(isset($options[ARALCO_SLUG . '_field_order_is_quote']) &&
+            $options[ARALCO_SLUG . '_field_order_is_quote'] == '1') {
+            return false;
+        }
+        return $this_has_status_valid_order_statuses_this_get_total_0;
+    }
+
+#endregion
+
+#region Submit Order to BOS
+
+    /**
+     * Catches completed orders and pushes them back to Aralco
+     *
+     * @param $order_id
+     */
+    public function submit_order_to_aralco($order_id) {
+        $result = Aralco_Processing_Helper::process_order($order_id);
+        if ($result instanceof WP_Error) {
+            wc_add_notice(__("Order submission to BOS failed: ", ARALCO_SLUG) . $result->get_error_message(),'error');
+            self::log_error("Order submission to BOS failed for order " . $order_id, $result);
+        } else {
+            self::log_info("Order submitted to BOS (order " . $order_id . ")", $result);
+        }
+    }
+
+#endregion
+
+#region Reference Number
+
+    /**
+     * Add the reference number field to the checkout
+     * @param $checkout
      */
 
     public function reference_number_checkout_field($checkout) {
@@ -1791,6 +2007,9 @@ $repeated_snippet
         echo '</div>';
     }
 
+    /**
+     * Perform validation for the reference number field on checkout
+     */
     public function reference_number_checkout_field_process() {
         $options = get_option(ARALCO_SLUG . '_options');
         if (!isset($options[ARALCO_SLUG . '_field_reference_number_enabled']) ||
@@ -1804,6 +2023,11 @@ $repeated_snippet
         }
     }
 
+    /**
+     * Save the reference number to the order metadata
+     *
+     * @param $order_id
+     */
     function reference_number_checkout_field_update_order_meta($order_id) {
         $options = get_option(ARALCO_SLUG . '_options');
         if (!isset($options[ARALCO_SLUG . '_field_reference_number_enabled']) ||
@@ -1814,59 +2038,10 @@ $repeated_snippet
     }
 
     /**
-     * Quote require no payment
-     */
-    public function quote_all_payment_gateway_disable($available_gateways) {
-        $options = get_option(ARALCO_SLUG . '_options');
-        if(isset($options[ARALCO_SLUG . '_field_order_is_quote']) &&
-            $options[ARALCO_SLUG . '_field_order_is_quote'] == '1') {
-            return [];
-        }
-        return $available_gateways;
-    }
-
-    public function quote_update_order_status_pending($order_id) {
-        $options = get_option(ARALCO_SLUG . '_options');
-        if(isset($options[ARALCO_SLUG . '_field_order_is_quote']) &&
-            $options[ARALCO_SLUG . '_field_order_is_quote'] == '1') {
-            $order = new WC_Order($order_id);
-            $order->update_status('processing');
-        }
-    }
-
-    public function quote_cart_needs_payment($total_is_0, $cart) {
-        $options = get_option(ARALCO_SLUG . '_options');
-        if(isset($options[ARALCO_SLUG . '_field_order_is_quote']) &&
-            $options[ARALCO_SLUG . '_field_order_is_quote'] == '1') {
-            return false;
-        }
-        return $total_is_0;
-    }
-
-    public function quote_order_needs_payment($this_has_status_valid_order_statuses_this_get_total_0, $order, $valid_order_statuses) {
-        $options = get_option(ARALCO_SLUG . '_options');
-        if(isset($options[ARALCO_SLUG . '_field_order_is_quote']) &&
-            $options[ARALCO_SLUG . '_field_order_is_quote'] == '1') {
-            return false;
-        }
-        return $this_has_status_valid_order_statuses_this_get_total_0;
-    }
-
-    /**
-     * Catches completed orders and pushes them back to Aralco
+     * Shows the reference number on the order in my account
      *
-     * @param $order_id
+     * @param $order
      */
-    public function submit_order_to_aralco($order_id) {
-        $result = Aralco_Processing_Helper::process_order($order_id);
-        if ($result instanceof WP_Error) {
-            wc_add_notice(__("Order submission to BOS failed: ", ARALCO_SLUG) . $result->get_error_message(),'error');
-            self::log_error("Order submission to BOS failed for order " . $order_id, $result);
-        } else {
-            self::log_info("Order submitted to BOS (order " . $order_id . ")", $result);
-        }
-    }
-
     public function show_reference_number($order) {
         $options = get_option(ARALCO_SLUG . '_options');
         if(isset($options[ARALCO_SLUG . '_field_reference_number_enabled']) &&
@@ -1877,6 +2052,14 @@ $repeated_snippet
         }
     }
 
+    /**
+     * Adds the reference number to the customer email
+     *
+     * @param $order
+     * @param $sent_to_admin
+     * @param $plain_text
+     * @param $email
+     */
     public function show_reference_number_email($order, $sent_to_admin, $plain_text, $email){
         $options = get_option(ARALCO_SLUG . '_options');
         if(isset($options[ARALCO_SLUG . '_field_reference_number_enabled']) &&
@@ -1892,6 +2075,34 @@ $repeated_snippet
         }
     }
 
+#endregion
+
+#region Order to Quote Text Replacement
+
+    /**
+     * Register email class overrides
+     */
+    public function register_email_classes($email_classes) {
+        $email_classes['WC_Email_New_Order']                 = require __DIR__ . '/woocommerce/emails/class-wc-email-new-order.php';
+        $email_classes['WC_Email_Cancelled_Order']           = require __DIR__ . '/woocommerce/emails/class-wc-email-cancelled-order.php';
+        $email_classes['WC_Email_Failed_Order']              = require __DIR__ . '/woocommerce/emails/class-wc-email-failed-order.php';
+        $email_classes['WC_Email_Customer_On_Hold_Order']    = require __DIR__ . '/woocommerce/emails/class-wc-email-customer-on-hold-order.php';
+        $email_classes['WC_Email_Customer_Processing_Order'] = require __DIR__ . '/woocommerce/emails/class-wc-email-customer-processing-order.php';
+        $email_classes['WC_Email_Customer_Completed_Order']  = require __DIR__ . '/woocommerce/emails/class-wc-email-customer-completed-order.php';
+        $email_classes['WC_Email_Customer_Refunded_Order']   = require __DIR__ . '/woocommerce/emails/class-wc-email-customer-refunded-order.php';
+//        $email_classes['WC_Email_Customer_Invoice']          = require __DIR__ . '/woocommerce/emails/class-wc-email-customer-invoice.php';
+        $email_classes['WC_Email_Customer_Note']             = require __DIR__ . '/woocommerce/emails/class-wc-email-customer-note.php';
+
+        return $email_classes;
+    }
+
+    /**
+     * Replaces the page header for checkout
+     *
+     * @param $title
+     * @param $endpoint
+     * @return string|void
+     */
     public function endpoint_order_pay_title($title, $endpoint){
         $options = get_option(ARALCO_SLUG . '_options');
         if(isset($options[ARALCO_SLUG . '_field_order_quote_text']) &&
@@ -1901,15 +2112,13 @@ $repeated_snippet
         return $title;
     }
 
-    public function endpoint_order_received_title($title, $endpoint){
-        $options = get_option(ARALCO_SLUG . '_options');
-        if(isset($options[ARALCO_SLUG . '_field_order_quote_text']) &&
-            $options[ARALCO_SLUG . '_field_order_quote_text'] == '1') {
-            $title = __( 'Quote created', 'woocommerce' );
-        }
-        return $title;
-    }
-
+    /**
+     * Replaces the page title for my account order list
+     *
+     * @param $title
+     * @param $endpoint
+     * @return string|void
+     */
     public function endpoint_orders_title($title, $endpoint){
         $options = get_option(ARALCO_SLUG . '_options');
         if(isset($options[ARALCO_SLUG . '_field_order_quote_text']) &&
@@ -1925,6 +2134,13 @@ $repeated_snippet
         return $title;
     }
 
+    /**
+     * Replaces the page title for single order view page
+     *
+     * @param $title
+     * @param $endpoint
+     * @return string
+     */
     public function endpoint_view_order_title($title, $endpoint){
         $options = get_option(ARALCO_SLUG . '_options');
         if(isset($options[ARALCO_SLUG . '_field_order_is_quote']) &&
@@ -1937,6 +2153,12 @@ $repeated_snippet
         return $title;
     }
 
+    /**
+     * Replaces the sidebar menu item for orders on the my account page
+     *
+     * @param $items
+     * @return mixed
+     */
     public function account_menu_items($items){
         $options = get_option(ARALCO_SLUG . '_options');
         if(isset($options[ARALCO_SLUG . '_field_order_quote_text']) &&
@@ -1946,6 +2168,12 @@ $repeated_snippet
         return $items;
     }
 
+    /**
+     * Replaces the order text inside the order column within an order
+     *
+     * @param $items
+     * @return mixed
+     */
     public function my_account_my_orders_columns($items){
         $options = get_option(ARALCO_SLUG . '_options');
         if(isset($options[ARALCO_SLUG . '_field_order_quote_text']) &&
@@ -1955,6 +2183,12 @@ $repeated_snippet
         return $items;
     }
 
+    /**
+     * Replaces the checkout button text
+     *
+     * @param $text
+     * @return string|void
+     */
     public function order_button_text($text) {
         $options = get_option(ARALCO_SLUG . '_options');
         if (isset($options[ARALCO_SLUG . '_field_order_quote_text']) &&
@@ -1964,6 +2198,12 @@ $repeated_snippet
         return $text;
     }
 
+    /**
+     * Replaces the checkout notes hint text
+     *
+     * @param $fields
+     * @return mixed
+     */
     public function checkout_fields($fields) {
         $options = get_option(ARALCO_SLUG . '_options');
         if (isset($options[ARALCO_SLUG . '_field_order_quote_text']) &&
@@ -1976,6 +2216,29 @@ $repeated_snippet
         return $fields;
     }
 
+    /**
+     * Replaces the page header for the thank you page
+     *
+     * @param $title
+     * @param $endpoint
+     * @return string|void
+     */
+    public function endpoint_order_received_title($title, $endpoint){
+        $options = get_option(ARALCO_SLUG . '_options');
+        if(isset($options[ARALCO_SLUG . '_field_order_quote_text']) &&
+            $options[ARALCO_SLUG . '_field_order_quote_text'] == '1') {
+            $title = __( 'Quote created', 'woocommerce' );
+        }
+        return $title;
+    }
+
+    /**
+     * Replaces the thank you page text
+     *
+     * @param $text
+     * @param $order
+     * @return string
+     */
     public function thankyou_order_received_text($text, $order) {
         $options = get_option(ARALCO_SLUG . '_options');
         if (isset($options[ARALCO_SLUG . '_field_order_quote_text']) &&
@@ -1984,6 +2247,10 @@ $repeated_snippet
         }
         return $text;
     }
+
+#endregion
+
+#region Aralco Special Taxonomy
 
     /**
      * Registers the built in product taxonomy for tracking if a product is new, on special, or on clearance
@@ -2044,10 +2311,14 @@ $repeated_snippet
         }
     }
 
-    /* itemized notes hooks */
+#endregion
+
+#region Itemized Notes
 
     /**
      * Add a text field to each cart item
+     * @param $cart_item
+     * @param $cart_item_key
      */
     public function add_notes_input_after_cart_item_name($cart_item, $cart_item_key) {
         $options = get_option(ARALCO_SLUG . '_options');
@@ -2056,8 +2327,9 @@ $repeated_snippet
             return;
         }
         $notes = isset($cart_item['notes'])? $cart_item['notes'] : '';
+        /** @noinspection HtmlUnknownAttribute */
         printf(
-            '<div><label><input type="checkbox" class="toggle_item_note" data-toggle="#cart_notes_%s" autocomplete="off"%s> Add Note</label></div>',
+            '<div><label><input type="checkbox" class="toggle_item_note" data-toggle="#cart_notes_%s" autocomplete="off" %s> Add Note</label></div>',
             $cart_item_key,
             empty($notes) ? '' : ' checked="checked"'
         );
@@ -2111,6 +2383,14 @@ $repeated_snippet
         exit;
     }
 
+    /**
+     * Save the metadata to the cart item's meta
+     *
+     * @param $item
+     * @param $cart_item_key
+     * @param $values
+     * @param $order
+     */
     public function add_item_notes_meta_cart_item($item, $cart_item_key, $values, $order) {
         foreach ($item as $cart_item_key => $cart_item) {
             if (isset($cart_item['notes'])) {
@@ -2119,6 +2399,13 @@ $repeated_snippet
         }
     }
 
+    /**
+     * Adds the submitted note to the item data array
+     *
+     * @param $item_data
+     * @param $cart_item
+     * @return mixed
+     */
     public function add_notes_to_item_data($item_data, $cart_item) {
         if (!is_cart() && !empty($cart_item['notes'])) {
             $item_data[] = array(
@@ -2129,7 +2416,9 @@ $repeated_snippet
         return $item_data;
     }
 
-    /* End of itemized notes hooks */
+#endregion
+
+#region Logs
 
     /**
      * Adds an entry to the plugin log
@@ -2139,6 +2428,7 @@ $repeated_snippet
      * @param string $level the log level for the log.
      * @param bool $override_logging_option weather or not the logging setting should be respected.
      * @return bool If writing to the log was successful.
+     * @noinspection PhpMissingParamTypeInspection
      */
     private static function add_log($entry, $second_entry = null, $level = "INFO", $override_logging_option = false) {
         if(Aralco_WooCommerce_Connector::$loggingEnabled == null) {
@@ -2187,6 +2477,7 @@ $repeated_snippet
      * @param string|array $entry the item to log.
      * @param null|string|array $second_entry additional object to log.
      * @param false $override_logging_option weather or not the logging setting should be respected.
+     * @noinspection PhpDocSignatureInspection, PhpMissingParamTypeInspection
      */
     public static function log_error($entry, $second_entry = null, $override_logging_option = false) { self::add_log($entry, $second_entry, 'ERROR', $override_logging_option); }
 
@@ -2196,6 +2487,7 @@ $repeated_snippet
      * @param string|array $entry the item to log.
      * @param null|string|array $second_entry additional object to log.
      * @param false $override_logging_option weather or not the logging setting should be respected.
+     * @noinspection PhpDocSignatureInspection, PhpMissingParamTypeInspection
      */
     public static function log_warning($entry, $second_entry = null, $override_logging_option = false) { self::add_log($entry, $second_entry, 'WARN', $override_logging_option); }
 
@@ -2205,8 +2497,11 @@ $repeated_snippet
      * @param string|array $entry the item to log.
      * @param null|string|array $second_entry additional object to log.
      * @param false $override_logging_option weather or not the logging setting should be respected.
+     * @noinspection PhpDocSignatureInspection, PhpMissingParamTypeInspection
      */
     public static function log_info($entry, $second_entry = null, $override_logging_option = false) { self::add_log($entry, $second_entry, 'INFO', $override_logging_option); }
+
+#endregion
 }
 
 require_once 'aralco-widget.php';

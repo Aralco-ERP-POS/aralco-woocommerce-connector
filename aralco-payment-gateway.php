@@ -52,7 +52,7 @@ Available: {available}', ARALCO_SLUG)
         }
 
         function process_payment($order_id) {
-            do_action('aralco_refresh_user_data', wp_get_current_user()->nickname);
+            do_action('aralco_refresh_user_data', wp_get_current_user()->user_login);
 
             global $woocommerce;
             $order = new WC_Order($order_id);
@@ -138,7 +138,7 @@ Available: {available}', ARALCO_SLUG)
         }
 
         public function get_description() {
-            do_action('aralco_refresh_user_data', wp_get_current_user()->nickname);
+            do_action('aralco_refresh_user_data', wp_get_current_user()->user_login);
             $aralco_user = get_user_meta(get_current_user_id(), 'aralco_data', true);
 
             if(!is_array($aralco_user)) {

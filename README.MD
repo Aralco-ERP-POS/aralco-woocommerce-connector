@@ -2,7 +2,7 @@
 
 - Contributors: Elias Turner, Aralco
 - Tags: ecommerce
-- Stable tag: 1.26.1
+- Stable tag: 1.26.2
 - Tested up to: 5.7.2
 - Requires at least: 5.0
 - Requires PHP: 7.2

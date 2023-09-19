@@ -326,6 +326,9 @@ class Aralco_Processing_Helper {
             $product->set_regular_price($price);
             $product->set_sale_price($discount_price);
             $product->set_price($discount_price);
+            if(isset($item['Product']['PromotionExpiry'])) {
+                $product->set_date_on_sale_to($item['Product']['PromotionExpiry']);
+            }
         }
         $product->set_featured(($item['Product']['Featured'] == true));
         if(isset($item['Product']['WebProperties']['Weight'])){
@@ -709,6 +712,9 @@ class Aralco_Processing_Helper {
             } else {
                 $variation->set_price($aralco_product['Product']['DiscountPrice']);
                 $variation->set_sale_price($aralco_product['Product']['DiscountPrice']);
+                if(isset($item['Product']['PromotionExpiry'])) {
+                    $variation->set_date_on_sale_to($item['Product']['PromotionExpiry']);
+                }
             }
             $variation->set_regular_price($aralco_product['Product']['Price']);
 
@@ -1015,7 +1021,7 @@ class Aralco_Processing_Helper {
      */
     static function sync_departments($departments = null){
         if (is_array($departments)) {
-            Aralco_WooCommerce_Connector::log_info("Syncing departments: " . implode(',', $departments));
+            Aralco_WooCommerce_Connector::log_info("Syncing departments: " . json_encode($departments));
         } else {
             Aralco_WooCommerce_Connector::log_info("Syncing all departments");
         }
@@ -1343,6 +1349,7 @@ class Aralco_Processing_Helper {
      * @param int $user_id the wordpress user's id.
      * @param int $aralco_id the corresponding ID in aralco to update.
      * @return bool|WP_Error true if updated, otherwise WP_Error
+     * @noinspection PhpMissingParamTypeInspection
      */
     static function process_customer_update($user_id, $aralco_id){
         try {
@@ -1363,6 +1370,31 @@ class Aralco_Processing_Helper {
             'Phone'           => $user->get_billing_phone() ?? '',
             'ProvinceState'   => $user->get_billing_state() ?? 'Unknown',
             'ZipPostalCode'   => $user->get_billing_postcode() ?? '',
+        );
+        return Aralco_Connection_Helper::updateCustomer($customer);
+    }
+
+    /**
+     * update a customer in Aralco from order
+     *
+     * @param array $aralco_data the aralco user data object
+     * @param WC_Order $order the order to pull info from
+     * @return bool|WP_Error true if updated, otherwise WP_Error
+     * @noinspection PhpMissingParamTypeInspection
+     */
+    static function process_customer_update_from_order($aralco_data, $order){
+        $customer = array(
+            'Username'        => $aralco_data['email'],
+            'Address1'        => $order->get_billing_address_1() ?? 'Unknown',
+            'Address2'        => $order->get_billing_address_2() ?? '',
+            'City'            => $order->get_billing_city() ?? '',
+            'Companyname'     => $order->get_billing_company() ?? '',
+            'Country'         => $order->get_billing_country() ?? 'Unknown',
+            'Name'            => $order->get_billing_first_name() ?? 'Unknown',
+            'Surname'         => $order->get_billing_last_name() ?? 'Unknown',
+            'Phone'           => $order->get_billing_phone() ?? '',
+            'ProvinceState'   => $order->get_billing_state() ?? 'Unknown',
+            'ZipPostalCode'   => $order->get_billing_postcode() ?? '',
         );
         return Aralco_Connection_Helper::updateCustomer($customer);
     }
@@ -1519,7 +1551,7 @@ class Aralco_Processing_Helper {
 
         if((!isset($options[ARALCO_SLUG . '_field_order_enabled']) || $options[ARALCO_SLUG . '_field_order_enabled'] != true) &&
             $just_return == false) {
-            // Do nothing id you don't have orders enabled in settings
+            // Do nothing. orders are disabled
             return false;
         }
 
@@ -1540,13 +1572,14 @@ class Aralco_Processing_Helper {
             );
         }
 
-        $aralco_user = array();
+        $aralco_user = null;
+        $just_created_aralco_user = false;
         if($order->get_user()){ // If not a guest
-            $temp = get_user_meta($order->get_user()->ID, 'aralco_data', true); // Get aralco data
-            if ($temp) { // If got aralco data
-                $aralco_user = $temp; // Set it
+            $aralco_user = get_user_meta($order->get_user()->ID, 'aralco_data', true); // Get aralco data from WP DB
+            if (!$aralco_user) { // If that failed, attempt to fetch from Aralco directly.
+                $aralco_user = Aralco_Connection_Helper::getCustomer('UserName', $order->get_user()->user_email);
             }
-        } else {
+        } else { // If user logged out, try retrieving user another way.
             $email = $order->get_billing_email();
             $aralco_user = Aralco_Connection_Helper::getCustomer('UserName', $email);
             if(!$aralco_user || $aralco_user instanceof WP_Error){
@@ -1572,6 +1605,7 @@ class Aralco_Processing_Helper {
                         __('Was unable to create or find a user with the email: ' . $email, ARALCO_SLUG)
                     );
                 }
+                $just_created_aralco_user = true;
                 $aralco_user = Aralco_Connection_Helper::getCustomer('UserName', $email);
                 if(!$aralco_user || $aralco_user instanceof WP_Error){
                     Aralco_WooCommerce_Connector::log_error('Failed to find newly created user for order ' . $order->get_id(), $aralco_user);
@@ -1581,6 +1615,18 @@ class Aralco_Processing_Helper {
                     );
                 }
             }
+        }
+
+        if(!$aralco_user || $aralco_user instanceof WP_Error) {
+            Aralco_WooCommerce_Connector::log_error('Could not reliably assign a BOS customer to the current order. Aborting! Order Email: ' . $order->get_id(), $aralco_user);
+            return new WP_Error(
+                ARALCO_SLUG . '_message',
+                __('Could not reliably assign a BOS customer to the current order. Please contact us!', ARALCO_SLUG)
+            );
+        }
+
+        if(!$just_created_aralco_user){ // If we just created the user, the data will be up to date.
+            Aralco_Processing_Helper::process_customer_update_from_order($aralco_user, $order);
         }
 
         if(count($order->get_shipping_methods()) > 0) {
