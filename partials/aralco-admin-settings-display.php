@@ -384,7 +384,8 @@ require_once(ABSPATH.'wp-admin/includes/plugin.php');
                 }).done(function (response) {
                     aralcoContinueProcessing(response);
                 }).fail(function (response) {
-                    aralcoSomethingWentWrong(response);
+                    // aralcoSomethingWentWrong(response);
+                    aralcoContinueProcessing(data);
                 });
             }
         }

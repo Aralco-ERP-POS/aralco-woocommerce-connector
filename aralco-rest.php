@@ -112,6 +112,7 @@ function aralco_new_sync() {
     if(isset($_GET['sync-products'])){
         $chunk_data['queue'][] = 'products_init';
         $chunk_data['queue'][] = 'products';
+        $chunk_data['queue'][] = 'products_post';
     }
     if(isset($_GET['sync-stock'])){
         $chunk_data['queue'][] = 'stock_init';
@@ -339,6 +340,21 @@ function aralco_continue_sync() {
                     $chunk_data['progress'] = $chunk_data['total'];
                     array_shift($chunk_data['queue']);
                 }
+                break;
+            case 'products_post':
+                $result = Aralco_Processing_Helper::process_active_promotions();
+                if($result instanceof WP_Error) {
+                    Aralco_WooCommerce_Connector::log_error("Error processing promotion updates", $result);
+                    return $result;
+                }
+                $chunk_data['data'] = [];
+                $chunk_data['page'] = 0;
+                $chunk_data['number_of_pages'] = 1;
+                $chunk_data['number_of_records'] = 1;
+                $chunk_data['total'] = 1;
+                $chunk_data['progress'] = 0;
+                $message = 'Processing promotion updates...';
+                array_shift($chunk_data['queue']);
                 break;
             case 'stock_init':
                 $stock = Aralco_Connection_Helper::getProductStock($chunk_data['last_sync']);

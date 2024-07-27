@@ -83,6 +83,13 @@ class Aralco_Processing_Helper {
                 return $product_updates;
             }
             $products = $product_updates['data'];
+
+            $result = Aralco_Processing_Helper::process_active_promotions();
+            if ($result instanceof WP_Error) {
+                Aralco_WooCommerce_Connector::log_error("Processing of active promotions failed", $result);
+                return $result;
+            }
+
         } else {
             global $temp_shipping_product_code;
             $temp_shipping_product_code = get_option(ARALCO_SLUG . '_shipping_product_code', null);
@@ -165,6 +172,74 @@ class Aralco_Processing_Helper {
                     $wpdb->query("UPDATE $wpdb->posts SET post_status = 'trash' WHERE ID IN ($list)");
                 }
             }
+        }
+        return true;
+    }
+
+    static function process_active_promotions() {
+        $promotions = Aralco_Connection_Helper::getActivePromotions();
+        if ($promotions instanceof WP_Error) return $promotions;
+
+        if(is_array($promotions) && count($promotions) > 0){ // Got Data
+            
+            global $wpdb;
+
+            // Extract aralco_ids from the input array
+            $aralco_ids = array_map(function($promotion) {
+                return $promotion['productId'];
+            }, $promotions);
+        
+            // Find all products with aralco_id meta key
+            $query = "
+                SELECT p.ID, pm.meta_value as aralco_id
+                FROM $wpdb->posts p
+                LEFT JOIN $wpdb->postmeta pm ON p.ID = pm.post_id AND pm.meta_key = '_aralco_id'
+                WHERE p.post_type = 'product' AND p.post_status = 'publish'
+            ";
+        
+            $all_products = $wpdb->get_results($query);
+        
+            $non_matching_product_ids = [];
+        
+            // Determine non-matching products
+            foreach ($all_products as $product) {
+                if (!in_array((int)$product->aralco_id, $aralco_ids)) {
+                    $non_matching_product_ids[] = $product->ID;
+                }
+            }
+        
+            // Clear sale price for non-matching products
+            foreach ($non_matching_product_ids as $product_id) {
+                update_post_meta($product_id, '_sale_price', '');
+                update_post_meta($product_id, '_sale_price_dates_from', '');
+                update_post_meta($product_id, '_sale_price_dates_to', '');
+            }
+        
+            // Loop through the input array and update the sale price and expiration date
+            foreach ($promotions as $promotion) {
+                $product_id = $wpdb->get_var($wpdb->prepare(
+                    "SELECT post_id FROM {$wpdb->prefix}postmeta WHERE meta_key = '_aralco_id' AND meta_value = %d",
+                    $promotion['productId']
+                ));
+        
+                if ($product_id) {
+                    update_post_meta($product_id, '_sale_price', $promotion['minPrice']);
+        
+                    // Convert end_date to timestamp respecting WordPress timezone settings
+                    $end_date = DateTime::createFromFormat('Y-m-d H:i:s.u', $promotion['endDate']);
+                    if ($end_date) {
+                        // Adjust the date to WordPress timezone
+                        $end_date->setTimezone(new DateTimeZone(wp_timezone_string()));
+                        update_post_meta($product_id, '_sale_price_dates_to', $end_date->getTimestamp());
+                    } else {
+                        update_post_meta($product_id, '_sale_price_dates_to', '');
+                    }
+                }
+            }
+        
+            // Clear product cache to ensure the changes are reflected immediately
+            wc_delete_product_transients();
+
         }
         return true;
     }
