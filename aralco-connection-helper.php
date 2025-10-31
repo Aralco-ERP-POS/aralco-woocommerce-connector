@@ -38,6 +38,29 @@ class Aralco_Image {
 class Aralco_Connection_Helper {
 
     /**
+     * Apply default timeout settings to a cURL handle to avoid hanging requests.
+     *
+     * @param resource $curl The cURL handle to configure.
+     */
+    private static function apply_default_curl_timeout($curl) {
+        $connect_timeout = apply_filters('aralco_api_connect_timeout', 5);
+        $request_timeout = apply_filters('aralco_api_timeout', 10);
+
+        if (!is_numeric($connect_timeout)) {
+            $connect_timeout = 5;
+        }
+        if (!is_numeric($request_timeout)) {
+            $request_timeout = 10;
+        }
+
+        $connect_timeout = max(1, intval($connect_timeout));
+        $request_timeout = max($connect_timeout, intval($request_timeout));
+
+        curl_setopt($curl, CURLOPT_CONNECTTIMEOUT, $connect_timeout);
+        curl_setopt($curl, CURLOPT_TIMEOUT, $request_timeout);
+    }
+
+    /**
      * Checks if the proper options are set as a prerequisite to connecting to the Aralco Ecommerce API.
      *
      * @return bool returns true if the configuration is present, otherwise false.
@@ -60,6 +83,7 @@ class Aralco_Connection_Helper {
 
         $options = get_option(ARALCO_SLUG . '_options');
         $curl = curl_init();
+        self::apply_default_curl_timeout($curl);
         curl_setopt($curl, CURLOPT_URL, $options[ARALCO_SLUG . '_field_api_location'] .
                                         'api/Product/Search?EcommerceOnly=true');
         curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false); // Disable SSL verification
@@ -1033,6 +1057,7 @@ class Aralco_Connection_Helper {
         $options = get_option(ARALCO_SLUG . '_options');
 
         $curl = curl_init();
+        self::apply_default_curl_timeout($curl);
         curl_setopt($curl, CURLOPT_URL, $options[ARALCO_SLUG . '_field_api_location'] . 'api/Customer/Get?' . $column . '=' . $value);
         curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false); // Disable SSL verification
         curl_setopt($curl, CURLOPT_RETURNTRANSFER, true); // Return instead of printing
@@ -1132,6 +1157,7 @@ class Aralco_Connection_Helper {
         }
         $options = get_option(ARALCO_SLUG . '_options');
         $curl = curl_init();
+        self::apply_default_curl_timeout($curl);
         curl_setopt($curl, CURLOPT_URL, $options[ARALCO_SLUG . '_field_api_location'] .
                                         'api/Customer/Post');
         curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false); // Disable SSL verification
@@ -1184,6 +1210,7 @@ class Aralco_Connection_Helper {
         }
         $options = get_option(ARALCO_SLUG . '_options');
         $curl = curl_init();
+        self::apply_default_curl_timeout($curl);
         curl_setopt($curl, CURLOPT_URL, $options[ARALCO_SLUG . '_field_api_location'] .
             'api/Customer/Update');
         curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false); // Disable SSL verification

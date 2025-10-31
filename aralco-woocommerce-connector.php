@@ -995,24 +995,35 @@ class Aralco_WooCommerce_Connector {
             $data = Aralco_Connection_Helper::getCustomer('UserName', $user->user_email);
         }
 
+        if($data instanceof WP_Error) {
+            self::log_error($username . ' logged in. Failed to fetch customer data from Aralco.', $data);
+            return;
+        }
+
         if($data) {
             self::log_info($username . ' logged in. Found saved Aralco ID ' . $data['id']);
         }
 
         try {
-            if (!$data || $data instanceof WP_Error) {
+            if (!$data) {
                 // Must be a legacy customer. Create or link it.
                 $this->new_customer($user->ID);
                 $aralco_data = get_user_meta($user->ID, 'aralco_data', true);
-                $data = Aralco_Connection_Helper::getCustomer('Id', $aralco_data['id']);
-                if (isset($data['id'])){
-                    self::log_info($username . ' logged in. Couldn\'t find in aralco so it was created! Aralco ID ' . $data['id']);
+                if (isset($aralco_data['id'])) {
+                    $data = Aralco_Connection_Helper::getCustomer('Id', $aralco_data['id']);
+                    if ($data instanceof WP_Error) {
+                        self::log_error($username . ' logged in. Customer was created but could not be fetched from Aralco.', $data);
+                        return;
+                    }
+                    if ($data) {
+                        self::log_info($username . ' logged in. Couldn\'t find in aralco so it was created! Aralco ID ' . $data['id']);
+                    }
                 }
             }
 
-            if (!$data || $data instanceof WP_Error) {
+            if (!$data) {
                 // if it still doesn't exist, give up
-                self::log_error($username . ' logged in. Couldn\'t find or create a customer in Aralco!', $data);
+                self::log_error($username . ' logged in. Couldn\'t find or create a customer in Aralco!');
                 return;
             }
 
